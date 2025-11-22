@@ -23,18 +23,19 @@ static cl::opt<std::string> inputFilename(
     cl::value_desc("filename")
 );
 
-int main(int argc ,const char **argv){
+int main(int argc, const char **argv) {
     cl::ParseCommandLineOptions(argc, argv, "My Compiler\n");
     std::cout << "Input file: " << inputFilename << "\n";
     
     llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
       llvm::MemoryBuffer::getFileOrSTDIN(inputFilename);
-    if(std::error_code ec = fileOrErr.getError()){
+    if (std::error_code ec = fileOrErr.getError()) {
         llvm::errs() << "Could not open input file: " << ec.message() << "\n"; 
+        return 1;
     }
     auto buffer = fileOrErr.get()->getBuffer();
     
-    SourceFile sourceFile{inputFilename,buffer.str()};
+    SourceFile sourceFile{inputFilename, buffer.str()};
 
     TheLexer lexer{sourceFile};
 
@@ -42,16 +43,25 @@ int main(int argc ,const char **argv){
 
     Parser parse{lexer};
     auto parsedprogram = parse.parseProgram();
+    
+    std::cerr << "\n------------------AST Before Semantic Analysis-----------------------\n";
     for (auto &&fn : parsedprogram) {
-      fn->dump();
-     }
-    std::cerr << "\n\n";
-    std::cerr << "------------------AST After Semantic Analysis-----------------------"<<std::endl;
-    SemanticAnalysis sema(std::move(parsedprogram));
-    auto resolvedAST = sema.resolve();
-    for (auto &&fn : resolvedAST)
-      fn.dump();
-
+        fn->dump();
+    }
+    
+    std::cerr << "\n------------------Performing Semantic Analysis-----------------------\n";
+    SemanticAnalysis sema(parsedprogram);
+    bool success = sema.resolve();
+    
+    if (!success) {
+        std::cerr << "\nSemantic analysis failed!\n";
+        return 1;
+    }
+    
+    std::cerr << "\n------------------AST After Semantic Analysis------------------------\n";
+    for (auto &&fn : parsedprogram) {
+        fn->dump();
+    }
 
     std::cerr << "\n\n";
     return 0;

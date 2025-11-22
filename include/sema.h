@@ -1,32 +1,30 @@
 #ifndef SEMANTIC_ANALYSIS
 #define SEMANTIC_ANALYSIS
 
-#include<iostream>
-#include<string>
-#include<memory>
-#include<optional>
+#include <iostream>
+#include <string>
+#include <memory>
+#include <optional>
 
 #include "ast.h"
 
 class SemanticAnalysis {
-    std::vector<std::unique_ptr<FunctionDecl>> TopLevel;
-    std::vector<std::vector<ResolvedDecl *>> scopes; 
+    std::vector<std::unique_ptr<FunctionDecl>> &TopLevel;
+    std::vector<std::vector<Decl *>> scopes;
     std::vector<std::string> diagnostics;
     
-    void error(SourceLocation location,std::string_view message){
-    const auto& [file, line, col] = location;
-    std::ostringstream oss;
-    oss << file << ':' << line << ':' << col << ": error: " << message;
-    diagnostics.push_back(oss.str());
-    std::cerr << oss.str() << "\n";
+    void error(SourceLocation location, std::string_view message) {
+        const auto& [file, line, col] = location;
+        std::ostringstream oss;
+        oss << file << ':' << line << ':' << col << ": error: " << message;
+        diagnostics.push_back(oss.str());
+        std::cerr << oss.str() << "\n";
     }
 
-    
-
-    ResolvedDecl *lookupDecl (const std::string id){
-        for (auto it =scopes.begin() ; it != scopes.end();++it){
-            for(auto &&decl: *it){
-                if(decl->identifier==id){
+    Decl *lookupDecl(const std::string &id) {
+        for (auto it = scopes.rbegin(); it != scopes.rend(); ++it) {
+            for (auto &&decl : *it) {
+                if (decl->identifier == id) {
                     return decl;
                 }
             }
@@ -34,176 +32,181 @@ class SemanticAnalysis {
         return nullptr;
     }
     
-    std::optional<Type> resolveType(const std::string &typeSpecifier){
+    std::optional<Type> resolveType(const std::string &typeSpecifier) {
         if (typeSpecifier == "void") return Type::VOID;
         if (typeSpecifier == "string") return Type::STRING;
         if (typeSpecifier == "number") return Type::NUMBER;
         return std::nullopt;
     }
-    std::unique_ptr<ResolvedDeclRefExpr> resolveDeclRefExpr(const DeclRefExpr &DRE){
-        ResolvedDecl *decl = lookupDecl(DRE.identifier);
+
+    bool resolveDeclRefExpr(DeclRefExpr &DRE) {
+        Decl *decl = lookupDecl(DRE.identifier);
         if (!decl) {
             error(DRE.location, "symbol '" + DRE.identifier + "' not found");
-            return nullptr;
+            return false;
         }
-        return std::make_unique<ResolvedDeclRefExpr>(DRE.location, decl);
+        DRE.resolvedDecl = decl;
+        DRE.resolvedType = decl->resolvedType;
+        return true;
     }
 
-    std::unique_ptr<ResolvedPrintExpr> resolvePrintExpr( const PrintExpr &printexpr){
-      std::vector<std::unique_ptr<ResolvedExpr>> resolvedArguments;
-      for (auto &&arg : printexpr.args){
-        auto resolvedArg = resolveExpr(*arg);
-        if (!resolvedArg) {                 
-            return nullptr;
-        }
-        resolvedArguments.emplace_back(std::move(resolvedArg));
-      }
-       if (resolvedArguments.size() != printexpr.args.size()) {
-            error(printexpr.location, "missing arguments in the print statement");
-            return nullptr;
-       }
-
-    return std::make_unique<ResolvedPrintExpr>(
-        printexpr.location,std::move(resolvedArguments));
-
-    }
-
-    std::unique_ptr<ResolvedCallExpr> resolveCallExpr( const CallExpr &cexpr){
-        auto resolvedCallee = resolveDeclRefExpr(*cexpr.identifier);
-        if(!resolvedCallee){
-            return nullptr;
-        }
-        auto resolvedFunctionDecl = dynamic_cast<ResolvedFunctionDecl *>(resolvedCallee->decl);
-        if (!resolvedFunctionDecl) {
-            error(cexpr.location, "calling non-function element");
-            return nullptr;
-        }
-      std::vector<std::unique_ptr<ResolvedExpr>> resolvedArguments;
-      int idx =0;
-      for (auto &&arg : cexpr.arguments){
-        if(auto resolvedarg= resolveExpr(*arg)){
-            if(resolvedarg->type != resolvedFunctionDecl->params[idx]->type){ 
-                error(resolvedarg->location,"unexpected type of argument in " + resolvedFunctionDecl->identifier + " function call");
-                return nullptr;
+    bool resolvePrintExpr(PrintExpr &printexpr) {
+        for (auto &&arg : printexpr.args) {
+            if (!resolveExpr(*arg)) {
+                return false;
             }
-            resolvedArguments.emplace_back(std::move(resolvedarg));
         }
-        else{
-            return nullptr;
+        
+        if (printexpr.args.empty()) {
+            error(printexpr.location, "print requires at least one argument");
+            return false;
         }
-        idx++;
-      }
-       if (resolvedArguments.size() != resolvedFunctionDecl->params.size()) {
-            error(cexpr.location, "missing arguments from function call");
-            return nullptr;
-       }
-
-    return std::make_unique<ResolvedCallExpr>(
-        cexpr.location, resolvedFunctionDecl, std::move(resolvedArguments));
-
+        
+        printexpr.resolvedType = Type::VOID;
+        return true;
     }
 
-    std::unique_ptr<ResolvedExpr> resolveExpr(const Expr &expr){
-        if(auto stringLiteral= dynamic_cast<const StringLiteral *> (&expr)){
-            return std::make_unique<ResolvedStringLiteral>(stringLiteral->location,
-                                                     stringLiteral->value);
+    bool resolveCallExpr(CallExpr &cexpr) {
+ 
+        if (!resolveDeclRefExpr(*cexpr.identifier)) {
+            return false;
         }
-        if(auto numberLiteral= dynamic_cast<const NumberLiteral *> (&expr)){
-            return std::make_unique<ResolvedNumberLiteral>(numberLiteral->location,
-                                                     numberLiteral->value);
+        
+        auto functionDecl = dynamic_cast<FunctionDecl *>(cexpr.identifier->resolvedDecl);
+        if (!functionDecl) {
+            error(cexpr.location, "calling non-function element");
+            return false;
         }
-        if(auto dre= dynamic_cast<const DeclRefExpr *> (&expr)){
+        
+        cexpr.resolvedCallee = functionDecl;
+        if (cexpr.arguments.size() != functionDecl->params.size()) {
+            error(cexpr.location, "wrong number of arguments in function call");
+            return false;
+        }
+        
+        for (size_t idx = 0; idx < cexpr.arguments.size(); ++idx) {
+            if (!resolveExpr(*cexpr.arguments[idx])) {
+                return false;
+            }
+            
+            if (cexpr.arguments[idx]->resolvedType != functionDecl->params[idx]->resolvedType) {
+                error(cexpr.arguments[idx]->location, 
+                      "unexpected type of argument in " + functionDecl->identifier + " function call");
+                return false;
+            }
+        }
+        
+        cexpr.resolvedType = functionDecl->resolvedType;
+        return true;
+    }
+
+    bool resolveExpr(Expr &expr) {
+        if (auto stringLiteral = dynamic_cast<StringLiteral *>(&expr)) {
+            return true;  
+        }
+        if (auto numberLiteral = dynamic_cast<NumberLiteral *>(&expr)) {
+            return true;
+        }
+        if (auto dre = dynamic_cast<DeclRefExpr *>(&expr)) {
             return resolveDeclRefExpr(*dre);
         }
-        if(auto printexpr= dynamic_cast<const PrintExpr *> (&expr)){
+        if (auto printexpr = dynamic_cast<PrintExpr *>(&expr)) {
             return resolvePrintExpr(*printexpr);
         }
-        if(auto cexpr= dynamic_cast<const CallExpr *> (&expr)){
+        if (auto cexpr = dynamic_cast<CallExpr *>(&expr)) {
             return resolveCallExpr(*cexpr);
         }
-        return nullptr;
+        
+        error(expr.location, "unknown expression type");
+        return false;
     }
 
-    std::unique_ptr<ResolvedStmt> resolveStmt(const Stmt &stmt){
-        return resolveExpr(dynamic_cast<const Expr &>(stmt));
-    }
-
-    std::unique_ptr<ResolvedBlock> resolveBody(const Block &body){
-        std::vector<std::unique_ptr<ResolvedStmt>> resolvedstatements;
-
-        for(auto &&stmt : body.statements){
-            if(auto resolvedstmt = resolveStmt(*stmt)){
-                resolvedstatements.emplace_back(std::move(resolvedstmt));
-            }
-            else{
-                return nullptr;
-            }
+    bool resolveStmt(Stmt &stmt) {
+        if (auto expr = dynamic_cast<Expr *>(&stmt)) {
+            return resolveExpr(*expr);
         }
-        return std::make_unique<ResolvedBlock>(body.location,std::move(resolvedstatements));        
+        error(stmt.location, "unknown statement type");
+        return false;
     }
 
-    std::unique_ptr<ResolvedParamDecl> resolveParamDecl(const ParamDecl &param){
-    std::optional<Type> param_type= resolveType(param.type);
-    if(!param_type){
-        error(param.location,std::string{"parameter '"} +
-                                       param.identifier + "' has invalid '" +
-                                       param.type + "' type");
-        return nullptr;
-    }
-    if(lookupDecl(param.identifier)){
-        error(param.location, std::string{"parameter '"} +
-                                       param.identifier + "' redeclared");
-        return nullptr;
-    }
-    return std::make_unique<ResolvedParamDecl>(param.location,param.identifier,*param_type);
-   }
-
-    std::unique_ptr<ResolvedFunctionDecl> resolveFunctionWithoutBody(const FunctionDecl &function){
-        std::vector<std::unique_ptr<ResolvedParamDecl>> resolvedParams;
-        for (auto &&param: function.params){
-            if(auto resolvedparam = resolveParamDecl(*param)){
-                resolvedParams.emplace_back(std::move(resolvedparam));
-            }else{
-                return nullptr;
+    bool resolveBody(Block &body) {
+        for (auto &&stmt : body.statements) {
+            if (!resolveStmt(*stmt)) {
+                return false;
             }
         }
-        std::optional<Type> type= resolveType(function.funtype);
-        return std::make_unique<ResolvedFunctionDecl> (function.location, function.identifier, *type,std::move(resolvedParams),nullptr);
-
+        return true;
     }
 
-
-    public:
-    SemanticAnalysis(std::vector<std::unique_ptr<FunctionDecl>> TopLevel):TopLevel(std::move(TopLevel)){}
-    std::vector<ResolvedFunctionDecl> resolve(){
-        scopes.emplace_back();
-
-        std::vector<ResolvedFunctionDecl> resolvedFunctions; 
-        resolvedFunctions.reserve(TopLevel.size());
-
-        for (auto &&function:TopLevel){
-                if(auto resolvedFunction = resolveFunctionWithoutBody(*function)){
-                    resolvedFunctions.emplace_back(std::move(*resolvedFunction));
-                    scopes.back().emplace_back(&resolvedFunctions.back());
-             }
+    bool resolveParamDecl(ParamDecl &param) {
+        std::optional<Type> param_type = resolveType(param.type);
+        if (!param_type) {
+            error(param.location, std::string{"parameter '"} +
+                  param.identifier + "' has invalid '" +
+                  param.type + "' type");
+            return false;
         }
-        if(resolvedFunctions.size()!= TopLevel.size()){
-            return {};
+        
+        if (lookupDecl(param.identifier)) {
+            error(param.location, std::string{"parameter '"} +
+                  param.identifier + "' redeclared");
+            return false;
         }
-        for (size_t i=0; i< TopLevel.size();++i){
-            scopes.emplace_back();
-            for(auto &&param:resolvedFunctions[i].params)
-                scopes.back().emplace_back(param.get());
-            
-            if(auto resolvedbody = resolveBody(*TopLevel[i]->body))
-                resolvedFunctions[i].body =std::move(resolvedbody);
-            else 
-              return {};
-            
-            scopes.pop_back();  
+        
+        param.resolvedType = *param_type;
+        return true;
+    }
+
+    bool resolveFunctionSignature(FunctionDecl &function) {
+        std::optional<Type> type = resolveType(function.funtype);
+        if (!type) {
+            error(function.location, "invalid return type '" + function.funtype + "'");
+            return false;
+        }
+        function.resolvedType = *type;
+        for (auto &&param : function.params) {
+            if (!resolveParamDecl(*param)) {
+                return false;
             }
-        return std::move(resolvedFunctions);
+        }
+        
+        return true;
     }
+
+public:
+    SemanticAnalysis(std::vector<std::unique_ptr<FunctionDecl>> &TopLevel)
+        : TopLevel(TopLevel) {}
     
+    bool resolve() {
+        scopes.emplace_back();
+        
+        // First pass: resolve function signatures and add to scope
+        for (auto &&function : TopLevel) {
+            if (!resolveFunctionSignature(*function)) {
+                return false;
+            }
+            scopes.back().emplace_back(function.get());
+        }
+        
+        // Second pass: resolve function bodies
+        for (auto &&function : TopLevel) {
+            scopes.emplace_back();
+            
+            // Add parameters to scope
+            for (auto &&param : function->params) {
+                scopes.back().emplace_back(param.get());
+            }
+            
+            // Resolve body
+            if (!resolveBody(*function->body)) {
+                return false;
+            }
+            
+            scopes.pop_back();
+        }
+        
+        return true;
+    }
 };
-#endif 
+
+#endif

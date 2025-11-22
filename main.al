@@ -6,5 +6,5 @@ func bar(x: string, y: number): void {
 
 func main(): void {
     print(10,8);
-    bar('ram',23);
+    bar('ram',32);
 }

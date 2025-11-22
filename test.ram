@@ -1,0 +1,12 @@
+func greet(name: string): void {
+    print('Hello, ', name);
+}
+
+func add(x: number, y: number): number {
+    print('Result: ', x);
+}
+
+func main(): void {
+    greet('World');
+    add(5, 10);
+}
