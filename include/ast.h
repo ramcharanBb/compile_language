@@ -135,7 +135,7 @@ public:
     
     NumberLiteral(SourceLocation loc, std::string v)
         : Expr(std::move(loc)), value(std::move(v)) {
-        resolvedType = Type::NUMBER;  // Literals know their type immediately
+        resolvedType = Type::NUMBER; 
     }
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
@@ -146,7 +146,7 @@ public:
     
     StringLiteral(SourceLocation loc, std::string v)
         : Expr(std::move(loc)), value(std::move(v)) {
-        resolvedType = Type::STRING;  // Literals know their type immediately
+        resolvedType = Type::STRING;  
     }
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };

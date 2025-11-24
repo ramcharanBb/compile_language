@@ -15,20 +15,22 @@ class TheLexer{
   SourceLocation getSourceLocation(){
     return SourceLocation{sourceFile->path, line, column};
   }
-  char peekNextChar() {
+  int peekNextChar() { 
      if (idx >= sourceFile->buffer.size()) return EOF;
-     return sourceFile-> buffer[idx];}
-  char getNextChar(){
+     return static_cast<unsigned char>(sourceFile->buffer[idx]); 
+}
+int getNextChar(){
     if (idx >= sourceFile->buffer.size()) return EOF;
-    lastChar = sourceFile->buffer[idx++];
+    lastChar = sourceFile->buffer[idx++]; 
+
     if(lastChar == '\n'){ 
         ++line;
         column=0;
     }else {
         column++;
     }
-    return lastChar;
-  }
+    return static_cast<unsigned char>(lastChar); 
+}
   public :
   explicit TheLexer (const SourceFile &sourceFile): sourceFile(&sourceFile){}
   Token getNextToken();
@@ -55,7 +57,6 @@ class TheLexer{
         idx = 0;
         line = 0;
         column = 0;
-        std::cout << "\n--------AST BEFORE SEMANTIC ANALYSIS----------------"<< std::endl;
     }
 };
 

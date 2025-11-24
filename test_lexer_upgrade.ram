@@ -1,0 +1,17 @@
+
+
+func main() :void {
+    var x = 10;
+    var y = 20;
+    
+    if (x < y) {
+        print("x is less than y");
+    } else {
+        print("x is not less than y");
+    }
+    var z = x + y;
+    if (z>0) {
+        print("Success\nWith\tEscapes");
+    }
+    return 0;
+}
