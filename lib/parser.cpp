@@ -135,25 +135,60 @@ std::unique_ptr<Expr> Parser::parseParenExpr() {
 }
 
 std::unique_ptr<Stmt> Parser::parseReturnStmt(){
-    SourceLocation location =nextToken.location;
+    SourceLocation location = nextToken.location;
     skipToken(); // skip return token
+    
     std::unique_ptr<Expr> exp;
-    while(nextToken.kind != TokenKind::semi){
+    if (nextToken.kind != TokenKind::semi) {
         exp = parseExpr();
-        if(!exp){
-            error(nextToken.location, "expected expression in the resturn statement");
+        if (!exp) {
+            error(nextToken.location, "expected expression in the return statement");
             return nullptr; 
         }
     }
-    if(nextToken.kind != TokenKind::semi){
+    
+    if (nextToken.kind != TokenKind::semi) {
         error(nextToken.location, "expected ';' at the end of the return statement");
-            return nullptr; 
+        return nullptr; 
     }
     skipToken();
-    return std::make_unique<ReturnStmt> (nextToken.location,std::move(exp));
+    return std::make_unique<ReturnStmt>(location, std::move(exp));
 } 
 
-std::unique_ptr<Expr> Parser::parseExpr(){
+
+std::unique_ptr<VariableDecl> Parser::parseVariableDecl(){
+    error(nextToken.location, "variable declarations are not yet implemented");
+    skipToken();
+    return nullptr;
+}
+
+
+int Parser::getTokPrecedence() {
+    switch (nextToken.kind) {
+        case TokenKind::plus:
+        case TokenKind::minus:
+            return 10;
+        case TokenKind::mul:
+        case TokenKind::slash:
+        case TokenKind::percent:
+            return 20;
+        case TokenKind::lessthan:
+        case TokenKind::greaterthan:
+        case TokenKind::less_equal:
+        case TokenKind::great_equal:
+        case TokenKind::doublequal:
+        case TokenKind::not_equal:
+            return 5;
+        case TokenKind::amp_amp:
+            return 3;
+        case TokenKind::pipe_pipe:
+            return 2;
+        default:
+            return -1;
+    }
+}
+
+std::unique_ptr<Expr> Parser::parsePrimaryExpr() {
     switch (nextToken.kind){
         default:
             error(nextToken.location, "expected expression");
@@ -172,10 +207,49 @@ std::unique_ptr<Expr> Parser::parseExpr(){
     }
 }
 
+std::unique_ptr<Expr> Parser::parseBinaryExpr(int exprPrec, std::unique_ptr<Expr> lhs) {
+    while (true) {
+        int tokPrec = getTokPrecedence();
+        
+        if (tokPrec < exprPrec)
+            return lhs;
+        
+        TokenKind binOp = nextToken.kind;
+        SourceLocation opLoc = nextToken.location;
+        skipToken();
+        
+        auto rhs = parsePrimaryExpr();
+        if (!rhs)
+            return nullptr;
+        
+        int nextPrec = getTokPrecedence();
+        if (tokPrec < nextPrec) {
+            rhs = parseBinaryExpr(tokPrec + 1, std::move(rhs));
+            if (!rhs)
+                return nullptr;
+        }
+        
+        lhs = std::make_unique<BinaryExpr>(opLoc, std::move(lhs), binOp, std::move(rhs));
+    }
+}
+
+std::unique_ptr<Expr> Parser::parseExpr(){
+    auto lhs = parsePrimaryExpr();
+    if (!lhs)
+        return nullptr;
+    
+    return parseBinaryExpr(0, std::move(lhs));
+}
+
 
 std::unique_ptr<Stmt> Parser::parseStmt() {
     if (nextToken.kind == TokenKind::cf_return)
             return parseReturnStmt();
+    if (nextToken.kind == TokenKind::cf_int) {
+            parseVariableDecl();  
+            return nullptr; 
+    }
+            
     auto expr = parseExpr();
     if (!expr) {
         if (!skipUntil({TokenKind::semi, TokenKind::rbrace}))
