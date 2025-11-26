@@ -45,6 +45,7 @@ class Codegen : public ASTVisitor{
     void visit(DeclRefExpr& node) override;
     void visit(CallExpr& node) override; 
     void visit(Stmt& node) override;
+    void visit(ReturnStmt& node) override;
     void visit(Expr& node) override;
 
     void visit(FunctionDecl& node) override;
