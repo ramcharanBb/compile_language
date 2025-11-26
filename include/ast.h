@@ -24,6 +24,7 @@ inline std::string typeToString(Type t) {
 class ASTVisitor {
 public:
     virtual ~ASTVisitor() = default;
+
     virtual void visit(class Stmt          &node) = 0;
     virtual void visit(class Block         &node) = 0;
     virtual void visit(class PrintExpr     &node) = 0;
@@ -60,7 +61,7 @@ class DumpVisitor;
 class Stmt : public ASTNode {
 public:
     using ASTNode::ASTNode;
-    void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor &visitor) override =0;
 };
 
 class Block : public ASTNode {
@@ -81,7 +82,7 @@ public:
     
     Decl(SourceLocation loc, std::string id)
         : ASTNode(std::move(loc)), identifier(std::move(id)) {}
-    void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor &visitor) override  =0;
 };
 
 class ParamDecl : public Decl {
@@ -90,7 +91,7 @@ public:
     
     ParamDecl(SourceLocation loc, std::string id, std::string tp)
         : Decl(std::move(loc), std::move(id)), type(std::move(tp)) {}
-    void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
+    void accept(ASTVisitor &visitor) override { visitor.visit(*this); };
 };
 
 class FunctionDecl : public Decl {
@@ -163,12 +164,12 @@ public:
 
 class CallExpr : public Expr {
 public:
-    std::unique_ptr<DeclRefExpr> identifier;
+    std::string identifier;
     std::vector<std::unique_ptr<Expr>> arguments;
     FunctionDecl *resolvedCallee = nullptr;  // Set during semantic analysis
     
     CallExpr(SourceLocation loc,
-             std::unique_ptr<DeclRefExpr> id,
+             std::string id,
              std::vector<std::unique_ptr<Expr>> args)
         : Expr(std::move(loc)),
           identifier(std::move(id)),
@@ -230,6 +231,7 @@ public:
         currentLevel = oldLevel;
     }
 
+    
     /* Expressions */
     void visit(Expr &node) override { 
         std::string typeInfo = node.resolvedType ? 
@@ -257,7 +259,7 @@ public:
         dumpHeader("CallExpr" + typeInfo + ":");
         size_t oldLevel = currentLevel;
         currentLevel++;
-        node.identifier->accept(*this);
+        dumpHeader("Identifier: " + node.identifier);
         for (auto &a : node.arguments) a->accept(*this);
         currentLevel = oldLevel;
     }

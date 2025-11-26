@@ -36,7 +36,7 @@ enum class TokenKind{
 struct Token{
     SourceLocation location;
     TokenKind kind;
-    std::optional <std::string> value;
+    std::optional<std::string> value;
 
 
     Token(SourceLocation location, TokenKind kind, std::string value = "")
