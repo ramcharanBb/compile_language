@@ -2,6 +2,7 @@ add_executable(ram-compiler
     compiler.cpp
     lexer.cpp
     parser.cpp
+    codegen.cpp
 )
 
 # Map LLVM components to the actual libraries you need

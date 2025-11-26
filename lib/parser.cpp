@@ -61,9 +61,7 @@ std::unique_ptr<Expr> Parser::parseIdentifierExpr(){
     else {
         error(location, "expected ')' to close argument list");
     }
-    
-    auto declRefExpr = std::make_unique<DeclRefExpr>(location, identifier);
-    return std::make_unique<CallExpr>(location, std::move(declRefExpr), std::move(arguments));
+    return std::make_unique<CallExpr>(location,std::move(identifier), std::move(arguments));
 }
 
 std::unique_ptr<Expr> Parser::parsePrintExpr(){

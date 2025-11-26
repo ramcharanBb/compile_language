@@ -68,11 +68,13 @@ class SemanticAnalysis {
 
     bool resolveCallExpr(CallExpr &cexpr) {
  
-        if (!resolveDeclRefExpr(*cexpr.identifier)) {
+        Decl *decl = lookupDecl(cexpr.identifier);
+        if (!decl) {
+            error(cexpr.location, "function '" + cexpr.identifier + "' not found");
             return false;
         }
         
-        auto functionDecl = dynamic_cast<FunctionDecl *>(cexpr.identifier->resolvedDecl);
+        auto functionDecl = dynamic_cast<FunctionDecl *>(decl);
         if (!functionDecl) {
             error(cexpr.location, "calling non-function element");
             return false;
@@ -101,10 +103,10 @@ class SemanticAnalysis {
     }
 
     bool resolveExpr(Expr &expr) {
-        if (auto stringLiteral = dynamic_cast<StringLiteral *>(&expr)) {
+        if (dynamic_cast<StringLiteral *>(&expr)) {
             return true;  
         }
-        if (auto numberLiteral = dynamic_cast<NumberLiteral *>(&expr)) {
+        if (dynamic_cast<NumberLiteral *>(&expr)) {
             return true;
         }
         if (auto dre = dynamic_cast<DeclRefExpr *>(&expr)) {

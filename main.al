@@ -8,3 +8,4 @@ func main(): void {
     print(10,8);
     bar('ram',32);
 }
+

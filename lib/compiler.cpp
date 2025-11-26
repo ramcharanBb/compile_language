@@ -13,6 +13,7 @@
 #include "parser.h"
 #include "ast.h"
 #include "sema.h"
+#include "codegen.h"
 
 namespace cl = llvm::cl;
 
@@ -62,7 +63,9 @@ int main(int argc, const char **argv) {
     for (auto &&fn : parsedprogram) {
         fn->dump();
     }
-
+    std::cerr << "\n------------------LLVM IR------------------------\n";
+    Codegen codegen; 
+    codegen.generate(parsedprogram);
     std::cerr << "\n\n";
     return 0;
 }
