@@ -28,6 +28,7 @@ public:
     virtual void visit(class Stmt          &node) = 0;
     virtual void visit(class Block         &node) = 0;
     virtual void visit(class PrintExpr     &node) = 0;
+    virtual void visit(class ReturnStmt    &node) =0;
 
     virtual void visit(class Decl          &node) = 0;
     virtual void visit(class ParamDecl     &node) = 0;
@@ -162,6 +163,15 @@ public:
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
+class ReturnStmt : public Stmt{
+    public:
+      std::unique_ptr<Expr> expr=nullptr;
+      ReturnStmt(SourceLocation location, std::unique_ptr<Expr> expr)
+      : Stmt(location),
+        expr(std::move(expr)) {}
+    void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
+};
+
 class CallExpr : public Expr {
 public:
     std::string identifier;
@@ -231,6 +241,15 @@ public:
         currentLevel = oldLevel;
     }
 
+    void visit(ReturnStmt & node) override{
+    dumpHeader("ReturnStmt: "); 
+    size_t oldLevel = currentLevel;
+        currentLevel++;
+    if (node.expr) {
+        node.expr->accept(*this);
+    }
+    currentLevel = oldLevel;
+    }
     
     /* Expressions */
     void visit(Expr &node) override { 

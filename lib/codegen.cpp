@@ -60,6 +60,22 @@ void Codegen::visit(DeclRefExpr& node){
      }
      lastValue=value;
 }
+
+void Codegen::visit(ReturnStmt& node) {
+    if(node.expr){
+        node.expr->accept(*this);
+        if(lastValue){
+            lastValue=Builder->CreateRet(lastValue);
+        }
+        else {
+            lastValue= Builder->CreateRet(llvm::ConstantInt::get(*TheContext, llvm::APInt(64, 0)));
+        }
+    }
+    else{
+        Builder->CreateRetVoid(); 
+    }
+    return;
+}
 void Codegen::visit(PrintExpr& node){
      std::vector<llvm::Value*> argsP;
      std::string formatStr = "";

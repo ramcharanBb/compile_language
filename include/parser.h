@@ -23,6 +23,7 @@ class Parser{
     std::unique_ptr<Expr> parseStringExpr();
     std::unique_ptr<Expr> parsePrintExpr();
     std::unique_ptr<Expr> parseIdentifierExpr();
+    std::unique_ptr<Stmt> parseReturnStmt();
     std::unique_ptr<ParamDecl> parseParams(); 
     std::unique_ptr<Block> parseBlock();
     std::unique_ptr<Stmt> parseStmt();

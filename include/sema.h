@@ -12,6 +12,7 @@ class SemanticAnalysis {
     std::vector<std::unique_ptr<FunctionDecl>> &TopLevel;
     std::vector<std::vector<Decl *>> scopes;
     std::vector<std::string> diagnostics;
+    FunctionDecl* currentFunction = nullptr;
     
     void error(SourceLocation location, std::string_view message) {
         const auto& [file, line, col] = location;
@@ -122,8 +123,22 @@ class SemanticAnalysis {
         error(expr.location, "unknown expression type");
         return false;
     }
-
+  bool resolveReturnStmt(ReturnStmt *stmt){
+       if (currentFunction && (currentFunction->resolvedType == Type::VOID)){
+           if(stmt->expr!= nullptr){
+            error(stmt->location, "Cannot return a value from a function with 'void' return type.");
+            return false; 
+           }
+       }
+       if (auto expr = dynamic_cast<Expr *>((stmt->expr).get())) {
+            return resolveExpr(*expr);
+        }
+        return true;
+  }
     bool resolveStmt(Stmt &stmt) {
+        if (auto rstmt  = dynamic_cast<ReturnStmt *>(&stmt)) {
+            return resolveReturnStmt(rstmt);
+        }
         if (auto expr = dynamic_cast<Expr *>(&stmt)) {
             return resolveExpr(*expr);
         }
@@ -192,6 +207,7 @@ public:
         
         // Second pass: resolve function bodies
         for (auto &&function : TopLevel) {
+            currentFunction = function.get();
             scopes.emplace_back();
             
             // Add parameters to scope

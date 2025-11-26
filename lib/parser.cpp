@@ -134,6 +134,25 @@ std::unique_ptr<Expr> Parser::parseParenExpr() {
     return v;
 }
 
+std::unique_ptr<Stmt> Parser::parseReturnStmt(){
+    SourceLocation location =nextToken.location;
+    skipToken(); // skip return token
+    std::unique_ptr<Expr> exp;
+    while(nextToken.kind != TokenKind::semi){
+        exp = parseExpr();
+        if(!exp){
+            error(nextToken.location, "expected expression in the resturn statement");
+            return nullptr; 
+        }
+    }
+    if(nextToken.kind != TokenKind::semi){
+        error(nextToken.location, "expected ';' at the end of the return statement");
+            return nullptr; 
+    }
+    skipToken();
+    return std::make_unique<ReturnStmt> (nextToken.location,std::move(exp));
+} 
+
 std::unique_ptr<Expr> Parser::parseExpr(){
     switch (nextToken.kind){
         default:
@@ -153,7 +172,10 @@ std::unique_ptr<Expr> Parser::parseExpr(){
     }
 }
 
+
 std::unique_ptr<Stmt> Parser::parseStmt() {
+    if (nextToken.kind == TokenKind::cf_return)
+            return parseReturnStmt();
     auto expr = parseExpr();
     if (!expr) {
         if (!skipUntil({TokenKind::semi, TokenKind::rbrace}))

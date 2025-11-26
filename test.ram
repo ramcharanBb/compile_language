@@ -1,9 +1,11 @@
 func greet(name: string): void {
     print('Hello, ', name);
+    return 5;
 }
 
 func add(x: number, y: number): number {
     print('Result: ', x);
+    return 'not';
 }
 
 func main(): void {
