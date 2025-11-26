@@ -9,6 +9,7 @@
 #include <optional>
 
 #include "utils.h"
+#include "token.h"
 
 enum class Type { NUMBER, STRING, VOID };
 
@@ -39,6 +40,7 @@ public:
     virtual void visit(class StringLiteral &node) = 0;
     virtual void visit(class DeclRefExpr   &node) = 0;
     virtual void visit(class CallExpr      &node) = 0;
+    virtual void visit(class BinaryExpr    &node) = 0;
 
     void setLevel(size_t l) { currentLevel = l; }
     size_t getLevel() const { return currentLevel; }
@@ -163,6 +165,16 @@ public:
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
+class VariableDecl : public Decl {
+public:
+    std::string type;
+    std::unique_ptr<Expr> initializer; 
+
+    VariableDecl(SourceLocation loc,std::string id, std::string tp, std::unique_ptr<Expr> init = nullptr)
+        : Decl(std::move(loc),std::move(id)), type(std::move(tp)), initializer(std::move(init)) {}
+
+    void accept(ASTVisitor &visitor) override {visitor.visit(*this);}
+};
 class ReturnStmt : public Stmt{
     public:
       std::unique_ptr<Expr> expr=nullptr;
@@ -184,6 +196,24 @@ public:
         : Expr(std::move(loc)),
           identifier(std::move(id)),
           arguments(std::move(args)) {}
+    void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
+};
+
+class BinaryExpr : public Expr {
+public:
+    std::unique_ptr<Expr> left;
+    TokenKind op;
+    std::unique_ptr<Expr> right;
+
+    BinaryExpr(SourceLocation loc,
+               std::unique_ptr<Expr> lhs,
+               TokenKind operation,
+               std::unique_ptr<Expr> rhs)
+        : Expr(std::move(loc)),
+          left(std::move(lhs)),
+          op(operation),
+          right(std::move(rhs)) {}
+
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
@@ -280,6 +310,16 @@ public:
         currentLevel++;
         dumpHeader("Identifier: " + node.identifier);
         for (auto &a : node.arguments) a->accept(*this);
+        currentLevel = oldLevel;
+    }
+    void visit(BinaryExpr &node) override {
+        std::string typeInfo = node.resolvedType ? 
+            " : " + typeToString(*node.resolvedType) : "";
+        dumpHeader("BinaryExpr" + typeInfo + ": " + Token::kindToString(node.op));
+        size_t oldLevel = currentLevel;
+        currentLevel++;
+        node.left->accept(*this);
+        node.right->accept(*this);
         currentLevel = oldLevel;
     }
 };

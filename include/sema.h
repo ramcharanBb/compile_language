@@ -103,6 +103,69 @@ class SemanticAnalysis {
         return true;
     }
 
+    bool resolveBinaryExpr(BinaryExpr &bexpr) {
+        // Resolve left and right operands
+        if (!resolveExpr(*bexpr.left)) {
+            return false;
+        }
+        if (!resolveExpr(*bexpr.right)) {
+            return false;
+        }
+        
+        // For arithmetic operations, both operands must be numbers
+        if (bexpr.op == TokenKind::plus || bexpr.op == TokenKind::minus ||
+            bexpr.op == TokenKind::mul || bexpr.op == TokenKind::slash ||
+            bexpr.op == TokenKind::percent) {
+            
+            if (bexpr.left->resolvedType != Type::NUMBER) {
+                error(bexpr.left->location, "left operand of arithmetic operator must be a number");
+                return false;
+            }
+            if (bexpr.right->resolvedType != Type::NUMBER) {
+                error(bexpr.right->location, "right operand of arithmetic operator must be a number");
+                return false;
+            }
+            bexpr.resolvedType = Type::NUMBER;
+            return true;
+        }
+        
+        // For comparison operations, both operands must be numbers, result is number (0 or 1)
+        if (bexpr.op == TokenKind::lessthan || bexpr.op == TokenKind::greaterthan ||
+            bexpr.op == TokenKind::less_equal || bexpr.op == TokenKind::great_equal ||
+            bexpr.op == TokenKind::doublequal || bexpr.op == TokenKind::not_equal) {
+            
+            if (bexpr.left->resolvedType != Type::NUMBER) {
+                error(bexpr.left->location, "left operand of comparison operator must be a number");
+                return false;
+            }
+            if (bexpr.right->resolvedType != Type::NUMBER) {
+                error(bexpr.right->location, "right operand of comparison operator must be a number");
+                return false;
+            }
+            // Comparisons return a boolean, but we represent as NUMBER (0 or 1)
+            bexpr.resolvedType = Type::NUMBER;
+            return true;
+        }
+        
+        // For logical operations
+        if (bexpr.op == TokenKind::amp_amp || bexpr.op == TokenKind::pipe_pipe) {
+            // Logical operations also work on numbers (treated as booleans)
+            if (bexpr.left->resolvedType != Type::NUMBER) {
+                error(bexpr.left->location, "left operand of logical operator must be a number");
+                return false;
+            }
+            if (bexpr.right->resolvedType != Type::NUMBER) {
+                error(bexpr.right->location, "right operand of logical operator must be a number");
+                return false;
+            }
+            bexpr.resolvedType = Type::NUMBER;
+            return true;
+        }
+        
+        error(bexpr.location, "unknown binary operator");
+        return false;
+    }
+
     bool resolveExpr(Expr &expr) {
         if (dynamic_cast<StringLiteral *>(&expr)) {
             return true;  
@@ -118,6 +181,9 @@ class SemanticAnalysis {
         }
         if (auto cexpr = dynamic_cast<CallExpr *>(&expr)) {
             return resolveCallExpr(*cexpr);
+        }
+        if (auto bexpr = dynamic_cast<BinaryExpr *>(&expr)) {
+            return resolveBinaryExpr(*bexpr);
         }
         
         error(expr.location, "unknown expression type");

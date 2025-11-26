@@ -20,6 +20,7 @@ class Codegen : public ASTVisitor{
     std::unique_ptr<llvm::IRBuilder<>> Builder;
     std::map<std::string, llvm::Value *> NamedValues; 
     llvm::Value* lastValue = nullptr;
+    std::map<std::string, llvm::Value*> formatStringCache;
 
         llvm::Type *GenerateType(std::string type) {
     if (type == "number") {
@@ -52,6 +53,7 @@ class Codegen : public ASTVisitor{
     void visit(ParamDecl& node) override;
     void visit(Decl& node) override;
     void visit(PrintExpr& node) override;
+    void visit(BinaryExpr& node) override;
     
 };
 

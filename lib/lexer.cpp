@@ -119,6 +119,7 @@ Token TheLexer::getNextToken() {
         if (idStr == "func") return Token{loc, TokenKind::func};
         if (idStr == "print") return Token{loc, TokenKind::print};
         if (idStr == "return") return Token{loc, TokenKind::cf_return};
+        if (idStr == "int") return Token{loc, TokenKind::cf_int};
         if (idStr == "if") return Token{loc, TokenKind::cf_if};
         if (idStr == "else") return Token{loc, TokenKind::cf_else};
         if (idStr == "while") return Token{loc, TokenKind::cf_while};

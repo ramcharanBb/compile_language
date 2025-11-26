@@ -24,9 +24,15 @@ class Parser{
     std::unique_ptr<Expr> parsePrintExpr();
     std::unique_ptr<Expr> parseIdentifierExpr();
     std::unique_ptr<Stmt> parseReturnStmt();
+    
+    int getTokPrecedence();
+    std::unique_ptr<Expr> parsePrimaryExpr();
+    std::unique_ptr<Expr> parseBinaryExpr(int exprPrec, std::unique_ptr<Expr> lhs);
+    
     std::unique_ptr<ParamDecl> parseParams(); 
     std::unique_ptr<Block> parseBlock();
     std::unique_ptr<Stmt> parseStmt();
+    std::unique_ptr<VariableDecl> parseVariableDecl();
     std::unique_ptr<FunctionDecl> parseFunction();
     
     

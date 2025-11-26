@@ -79,7 +79,6 @@ void Codegen::visit(ReturnStmt& node) {
 void Codegen::visit(PrintExpr& node){
      std::vector<llvm::Value*> argsP;
      std::string formatStr = "";
-     
     for(auto &arg:node.args){
         arg->accept(*this);
         if(lastValue){
@@ -92,8 +91,13 @@ void Codegen::visit(PrintExpr& node){
         }
     }
     formatStr += "\n";
-    
-    llvm::Value* formatStrVar = Builder->CreateGlobalString(formatStr, "fmt", 0, TheModule.get());
+   llvm::Value* formatStrVar;
+        if (formatStringCache.count(formatStr)) {
+            formatStrVar = formatStringCache[formatStr];
+        } else {
+            formatStrVar = Builder->CreateGlobalString(formatStr, "fmt", 0, TheModule.get());
+            formatStringCache[formatStr] = formatStrVar;
+        }
     argsP.insert(argsP.begin(), formatStrVar);
     
     llvm::Function *calleeF = TheModule->getFunction("printf");
@@ -152,6 +156,96 @@ void Codegen::visit(Expr& node) {
 }
 
 void Codegen::visit(ParamDecl& node) {
+}
+
+
+void Codegen::visit(BinaryExpr& node) {
+    node.left->accept(*this);
+    llvm::Value* left = lastValue;
+    
+    node.right->accept(*this);
+    llvm::Value* right = lastValue;
+    
+    if (!left || !right) {
+        lastValue = nullptr;
+        return;
+    }
+    
+    // Arithmetic operations
+    switch (node.op) {
+        case TokenKind::plus:
+            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+                lastValue = Builder->CreateFAdd(left, right, "addtmp");
+            else
+                logerror("Invalid types for addition");
+            break;
+        case TokenKind::minus:
+            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+                lastValue = Builder->CreateFSub(left, right, "subtmp");
+            else
+                logerror("Invalid types for subtraction");
+            break;
+        case TokenKind::mul:
+            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+                lastValue = Builder->CreateFMul(left, right, "multmp");
+            else
+                logerror("Invalid types for multiplication");
+            break;
+        case TokenKind::slash:
+            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+                lastValue = Builder->CreateFDiv(left, right, "divtmp");
+            else
+                logerror("Invalid types for division");
+            break;
+        case TokenKind::percent:
+            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+                lastValue = Builder->CreateFRem(left, right, "modtmp");
+            else
+                logerror("Invalid types for modulo");
+            break;
+        
+        // Comparison operations
+        case TokenKind::lessthan:
+            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+                lastValue = Builder->CreateFCmpOLT(left, right, "cmptmp");
+            else
+                logerror("Invalid types for less than");
+            break;
+        case TokenKind::greaterthan:
+            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+                lastValue = Builder->CreateFCmpOGT(left, right, "cmptmp");
+            else
+                logerror("Invalid types for greater than");
+            break;
+        case TokenKind::less_equal:
+            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+                lastValue = Builder->CreateFCmpOLE(left, right, "cmptmp");
+            else
+                logerror("Invalid types for less than or equal");
+            break;
+        case TokenKind::great_equal:
+            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+                lastValue = Builder->CreateFCmpOGE(left, right, "cmptmp");
+            else
+                logerror("Invalid types for greater than or equal");
+            break;
+        case TokenKind::doublequal:
+            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+                lastValue = Builder->CreateFCmpOEQ(left, right, "cmptmp");
+            else
+                logerror("Invalid types for equality");
+            break;
+        case TokenKind::not_equal:
+            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+                lastValue = Builder->CreateFCmpONE(left, right, "cmptmp");
+            else
+                logerror("Invalid types for not equal");
+            break;
+        default:
+            logerror("Unknown binary operator");
+            lastValue = nullptr;
+            break;
+    }
 }
 
 void Codegen::visit(Decl& node) {
