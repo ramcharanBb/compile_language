@@ -157,9 +157,31 @@ std::unique_ptr<Stmt> Parser::parseReturnStmt(){
 
 
 std::unique_ptr<VariableDecl> Parser::parseVariableDecl(){
-    error(nextToken.location, "variable declarations are not yet implemented");
-    skipToken();
-    return nullptr;
+    SourceLocation location = nextToken.location;
+    skipToken(); // skip 'int' token
+    
+    if (nextToken.kind != TokenKind::identifier) {
+        error(nextToken.location, "expected identifier after type in variable declaration");
+        return nullptr;
+    }
+    
+    std::string varName = nextToken.value.value();
+    skipToken(); // skip identifier
+    
+    std::unique_ptr<Expr> initializer;
+    
+    // Check for optional initializer
+    if (nextToken.kind == TokenKind::equal) {
+        skipToken(); // skip '='
+        initializer = parseExpr();
+        if (!initializer) {
+            error(nextToken.location, "expected expression after '=' in variable declaration");
+            return nullptr;
+        }
+    }
+    
+    // For now, we only support 'number' type (represented by 'int' keyword)
+    return std::make_unique<VariableDecl>(location, varName, "number", std::move(initializer));
 }
 
 
@@ -238,6 +260,22 @@ std::unique_ptr<Expr> Parser::parseExpr(){
     if (!lhs)
         return nullptr;
     
+    if (auto declRef = dynamic_cast<DeclRefExpr*>(lhs.get())) {
+        if (nextToken.kind == TokenKind::equal) {
+            SourceLocation assignLoc = nextToken.location;
+            std::string target = declRef->identifier;
+            skipToken(); // skip '='
+            
+            auto rhs = parseExpr();
+            if (!rhs) {
+                error(nextToken.location, "expected expression after '=' in assignment");
+                return nullptr;
+            }
+            
+            return std::make_unique<AssignmentExpr>(assignLoc, target, std::move(rhs));
+        }
+    }
+    
     return parseBinaryExpr(0, std::move(lhs));
 }
 
@@ -245,9 +283,24 @@ std::unique_ptr<Expr> Parser::parseExpr(){
 std::unique_ptr<Stmt> Parser::parseStmt() {
     if (nextToken.kind == TokenKind::cf_return)
             return parseReturnStmt();
+    
     if (nextToken.kind == TokenKind::cf_int) {
-            parseVariableDecl();  
-            return nullptr; 
+        auto varDecl = parseVariableDecl();
+        if (!varDecl) {
+            if (!skipUntil({TokenKind::semi, TokenKind::rbrace}))
+                skipToken();
+            else if (nextToken.kind == TokenKind::semi)
+                skipToken();
+            return nullptr;
+        }
+        
+        if (nextToken.kind != TokenKind::semi) {
+            error(nextToken.location, "expected ';' after variable declaration");
+            skipToken();
+            return nullptr;
+        }
+        skipToken(); // skip ';'
+        return varDecl;
     }
             
     auto expr = parseExpr();

@@ -33,6 +33,7 @@ public:
 
     virtual void visit(class Decl          &node) = 0;
     virtual void visit(class ParamDecl     &node) = 0;
+    virtual void visit(class VariableDecl  &node) = 0;
     virtual void visit(class FunctionDecl  &node) = 0;
 
     virtual void visit(class Expr          &node) = 0;
@@ -41,6 +42,7 @@ public:
     virtual void visit(class DeclRefExpr   &node) = 0;
     virtual void visit(class CallExpr      &node) = 0;
     virtual void visit(class BinaryExpr    &node) = 0;
+    virtual void visit(class AssignmentExpr &node) = 0;
 
     void setLevel(size_t l) { currentLevel = l; }
     size_t getLevel() const { return currentLevel; }
@@ -61,7 +63,7 @@ public:
 class DumpVisitor;
 
 
-class Stmt : public ASTNode {
+class Stmt : public virtual ASTNode {
 public:
     using ASTNode::ASTNode;
     void accept(ASTVisitor &visitor) override =0;
@@ -78,7 +80,7 @@ public:
 
 /*-------------------- Declarations --------------------*/
 
-class Decl : public ASTNode {
+class Decl : public virtual ASTNode {
 public:
     std::string identifier;
     std::optional<Type> resolvedType;  // Populated during semantic analysis
@@ -93,7 +95,7 @@ public:
     std::string type;  
     
     ParamDecl(SourceLocation loc, std::string id, std::string tp)
-        : Decl(std::move(loc), std::move(id)), type(std::move(tp)) {}
+        : ASTNode(loc), Decl(loc, id), type(std::move(tp)) {}
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); };
 };
 
@@ -108,7 +110,7 @@ public:
                  std::string ft,
                  std::vector<std::unique_ptr<ParamDecl>> ps,
                  std::unique_ptr<Block> b)
-        : Decl(std::move(loc), std::move(name)),
+        : ASTNode(loc), Decl(loc, name),
           funtype(std::move(ft)),
           params(std::move(ps)),
           body(std::move(b)) {}
@@ -129,7 +131,7 @@ public:
     
     PrintExpr(SourceLocation loc,
               std::vector<std::unique_ptr<Expr>> a)
-        : Expr(std::move(loc)), args(std::move(a)) {}
+        : ASTNode(loc), Expr(loc), args(std::move(a)) {}
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
@@ -138,7 +140,7 @@ public:
     std::string value;
     
     NumberLiteral(SourceLocation loc, std::string v)
-        : Expr(std::move(loc)), value(std::move(v)) {
+        : ASTNode(loc), Expr(loc), value(std::move(v)) {
         resolvedType = Type::NUMBER; 
     }
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
@@ -149,7 +151,7 @@ public:
     std::string value;
     
     StringLiteral(SourceLocation loc, std::string v)
-        : Expr(std::move(loc)), value(std::move(v)) {
+        : ASTNode(loc), Expr(loc), value(std::move(v)) {
         resolvedType = Type::STRING;  
     }
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
@@ -161,17 +163,17 @@ public:
     Decl *resolvedDecl = nullptr;  // Set during semantic analysis
     
     DeclRefExpr(SourceLocation loc, std::string id)
-        : Expr(std::move(loc)), identifier(std::move(id)) {}
+        : ASTNode(loc), Expr(loc), identifier(std::move(id)) {}
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
-class VariableDecl : public Decl {
+class VariableDecl : public Stmt, public Decl {
 public:
     std::string type;
     std::unique_ptr<Expr> initializer; 
 
     VariableDecl(SourceLocation loc,std::string id, std::string tp, std::unique_ptr<Expr> init = nullptr)
-        : Decl(std::move(loc),std::move(id)), type(std::move(tp)), initializer(std::move(init)) {}
+        : ASTNode(loc), Stmt(loc), Decl(loc, id), type(std::move(tp)), initializer(std::move(init)) {}
 
     void accept(ASTVisitor &visitor) override {visitor.visit(*this);}
 };
@@ -179,7 +181,7 @@ class ReturnStmt : public Stmt{
     public:
       std::unique_ptr<Expr> expr=nullptr;
       ReturnStmt(SourceLocation location, std::unique_ptr<Expr> expr)
-      : Stmt(location),
+      : ASTNode(location), Stmt(location),
         expr(std::move(expr)) {}
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
@@ -193,7 +195,7 @@ public:
     CallExpr(SourceLocation loc,
              std::string id,
              std::vector<std::unique_ptr<Expr>> args)
-        : Expr(std::move(loc)),
+        : ASTNode(loc), Expr(loc),
           identifier(std::move(id)),
           arguments(std::move(args)) {}
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
@@ -209,10 +211,26 @@ public:
                std::unique_ptr<Expr> lhs,
                TokenKind operation,
                std::unique_ptr<Expr> rhs)
-        : Expr(std::move(loc)),
+        : ASTNode(loc), Expr(loc),
           left(std::move(lhs)),
           op(operation),
           right(std::move(rhs)) {}
+
+    void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
+};
+
+class AssignmentExpr : public Expr {
+public:
+    std::string target;  // Variable name being assigned to
+    std::unique_ptr<Expr> value;  // RHS expression
+    Decl *resolvedTarget = nullptr;  // Set during semantic analysis
+
+    AssignmentExpr(SourceLocation loc,
+                   std::string tgt,
+                   std::unique_ptr<Expr> val)
+        : ASTNode(loc), Expr(loc),
+          target(std::move(tgt)),
+          value(std::move(val)) {}
 
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
@@ -320,6 +338,27 @@ public:
         currentLevel++;
         node.left->accept(*this);
         node.right->accept(*this);
+        currentLevel = oldLevel;
+    }
+    void visit(VariableDecl &node) override {
+        std::string typeInfo = node.resolvedType ? 
+            " : " + typeToString(*node.resolvedType) : " : " + node.type;
+        std::string initInfo = node.initializer ? " (with initializer)" : "";
+        dumpHeader("VariableDecl: " + node.identifier + typeInfo + initInfo);
+        if (node.initializer) {
+            size_t oldLevel = currentLevel;
+            currentLevel++;
+            node.initializer->accept(*this);
+            currentLevel = oldLevel;
+        }
+    }
+    void visit(AssignmentExpr &node) override {
+        std::string typeInfo = node.resolvedType ? 
+            " : " + typeToString(*node.resolvedType) : "";
+        dumpHeader("AssignmentExpr" + typeInfo + ": " + node.target);
+        size_t oldLevel = currentLevel;
+        currentLevel++;
+        node.value->accept(*this);
         currentLevel = oldLevel;
     }
 };
