@@ -166,6 +166,61 @@ class SemanticAnalysis {
         return false;
     }
 
+    bool resolveVariableDecl(VariableDecl &varDecl) {
+        std::optional<Type> varType = resolveType(varDecl.type);
+        if (!varType) {
+            error(varDecl.location, "variable '" + varDecl.identifier + "' has invalid type '" + varDecl.type + "'");
+            return false;
+        }
+        
+        if (lookupDecl(varDecl.identifier)) {
+            error(varDecl.location, "variable '" + varDecl.identifier + "' redeclared");
+            return false;
+        }
+        
+        varDecl.resolvedType = *varType;
+        
+        // If there's an initializer, resolve it and check type compatibility
+        if (varDecl.initializer) {
+            if (!resolveExpr(*varDecl.initializer)) {
+                return false;
+            }
+            if (varDecl.initializer->resolvedType != *varType) {
+                error(varDecl.initializer->location, "initializer type does not match variable type");
+                return false;
+            }
+        }
+        
+        // Add to current scope
+        scopes.back().emplace_back(&varDecl);
+        return true;
+    }
+
+    bool resolveAssignmentExpr(AssignmentExpr &assignExpr) {
+        // Look up the target
+        Decl *decl = lookupDecl(assignExpr.target);
+        if (!decl) {
+            error(assignExpr.location, "assignment to undefined variable '" + assignExpr.target + "'");
+            return false;
+        }
+        
+        assignExpr.resolvedTarget = decl;
+        
+        // Resolve the RHS
+        if (!resolveExpr(*assignExpr.value)) {
+            return false;
+        }
+        
+        // Check type compatibility
+        if (assignExpr.value->resolvedType != decl->resolvedType) {
+            error(assignExpr.value->location, "assignment type mismatch");
+            return false;
+        }
+        
+        assignExpr.resolvedType = decl->resolvedType;
+        return true;
+    }
+
     bool resolveExpr(Expr &expr) {
         if (dynamic_cast<StringLiteral *>(&expr)) {
             return true;  
@@ -184,6 +239,9 @@ class SemanticAnalysis {
         }
         if (auto bexpr = dynamic_cast<BinaryExpr *>(&expr)) {
             return resolveBinaryExpr(*bexpr);
+        }
+        if (auto assignExpr = dynamic_cast<AssignmentExpr *>(&expr)) {
+            return resolveAssignmentExpr(*assignExpr);
         }
         
         error(expr.location, "unknown expression type");
@@ -204,6 +262,9 @@ class SemanticAnalysis {
     bool resolveStmt(Stmt &stmt) {
         if (auto rstmt  = dynamic_cast<ReturnStmt *>(&stmt)) {
             return resolveReturnStmt(rstmt);
+        }
+        if (auto varDecl = dynamic_cast<VariableDecl *>(&stmt)) {
+            return resolveVariableDecl(*varDecl);
         }
         if (auto expr = dynamic_cast<Expr *>(&stmt)) {
             return resolveExpr(*expr);

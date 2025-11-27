@@ -1,5 +1,7 @@
 func bar(x: string, y: number): void {
-    print(x);
+    int t=55;
+    x=3+4;
+    print(t);
     print(1.1);
 }
 

@@ -58,7 +58,18 @@ void Codegen::visit(DeclRefExpr& node){
         lastValue=nullptr;
         return;
      }
-     lastValue=value;
+     // If it's an AllocaInst (variable), we need to load it
+     // If it's a function parameter, it's already a value
+     if (llvm::isa<llvm::AllocaInst>(value)) {
+         lastValue = Builder->CreateLoad(
+             llvm::cast<llvm::AllocaInst>(value)->getAllocatedType(),
+             value,
+             node.identifier
+         );
+     } else {
+         // It's a direct value (parameter)
+         lastValue = value;
+     }
 }
 
 void Codegen::visit(ReturnStmt& node) {
@@ -76,6 +87,7 @@ void Codegen::visit(ReturnStmt& node) {
     }
     return;
 }
+
 void Codegen::visit(PrintExpr& node){
      std::vector<llvm::Value*> argsP;
      std::string formatStr = "";
@@ -100,13 +112,12 @@ void Codegen::visit(PrintExpr& node){
         }
     argsP.insert(argsP.begin(), formatStrVar);
     
-    llvm::Function *calleeF = TheModule->getFunction("printf");
-    if (!calleeF) {
-        std::vector<llvm::Type*> args;
-        args.push_back(llvm::PointerType::get(*TheContext, 0));
-        llvm::FunctionType *printfType = llvm::FunctionType::get(llvm::IntegerType::getInt32Ty(*TheContext), args, true);
-        calleeF = llvm::Function::Create(printfType, llvm::Function::ExternalLinkage, "printf", TheModule.get());
-    }
+    llvm::FunctionType *printfType = llvm::FunctionType::get(
+        llvm::IntegerType::getInt32Ty(*TheContext), 
+        llvm::PointerType::get(*TheContext, 0),
+        true 
+    );
+    llvm::FunctionCallee calleeF = TheModule->getOrInsertFunction("printf", printfType);
     Builder->CreateCall(calleeF, argsP, "printfCall");
     lastValue = nullptr;
 }
@@ -170,8 +181,6 @@ void Codegen::visit(BinaryExpr& node) {
         lastValue = nullptr;
         return;
     }
-    
-    // Arithmetic operations
     switch (node.op) {
         case TokenKind::plus:
             if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
@@ -203,8 +212,6 @@ void Codegen::visit(BinaryExpr& node) {
             else
                 logerror("Invalid types for modulo");
             break;
-        
-        // Comparison operations
         case TokenKind::lessthan:
             if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
                 lastValue = Builder->CreateFCmpOLT(left, right, "cmptmp");
@@ -249,4 +256,32 @@ void Codegen::visit(BinaryExpr& node) {
 }
 
 void Codegen::visit(Decl& node) {
+}
+
+void Codegen::visit(VariableDecl& node) {
+    llvm::Type* varType = GenerateType(node.type);
+    llvm::AllocaInst* alloca = Builder->CreateAlloca(varType, nullptr, node.identifier);
+    NamedValues[node.identifier] = alloca;
+    if (node.initializer) {
+        node.initializer->accept(*this);
+        if (lastValue) {
+            Builder->CreateStore(lastValue, alloca);
+        }
+    }
+    lastValue = nullptr;
+}
+
+void Codegen::visit(AssignmentExpr& node) {
+    llvm::Value* variable = NamedValues[node.target];
+    if (!variable) {
+        logerror("Unknown variable in assignment");
+        lastValue = nullptr;
+        return;
+    }
+    node.value->accept(*this);
+    if (!lastValue) {
+        logerror("Failed to generate RHS of assignment");
+        return;
+    }
+    Builder->CreateStore(lastValue, variable);
 }

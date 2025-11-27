@@ -1,9 +1,6 @@
-
-
 func main() :void {
-    var x = 10;
-    var y = 20;
-    
+    int x = 10;
+    int y = 20;
     if (x < y) {
         print("x is less than y");
     } else {
