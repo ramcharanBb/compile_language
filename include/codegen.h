@@ -6,6 +6,10 @@
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Value.h"
+#include "llvm/IR/PassManager.h" 
+#include "llvm/Passes/PassBuilder.h" 
+#include "llvm/Transforms/InstCombine/InstCombine.h" 
+#include "llvm/Analysis/InstructionSimplify.h" 
 #include <map>
 #include <memory>
 #include <string>
@@ -21,7 +25,12 @@ class Codegen : public ASTVisitor{
     std::map<std::string, llvm::Value *> NamedValues; 
     llvm::Value* lastValue = nullptr;
     std::map<std::string, llvm::Value*> formatStringCache;
-
+    
+    std::unique_ptr<llvm::FunctionPassManager> TheFPM;
+    std::unique_ptr<llvm::LoopAnalysisManager> TheLAM;
+    std::unique_ptr<llvm::FunctionAnalysisManager> TheFAM;
+    std::unique_ptr<llvm::CGSCCAnalysisManager> TheCGAM;
+    std::unique_ptr<llvm::ModuleAnalysisManager> TheMAM;
         llvm::Type *GenerateType(std::string type) {
     if (type == "number") {
         return llvm::Type::getDoubleTy(*TheContext);

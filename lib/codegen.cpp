@@ -1,13 +1,35 @@
 
-#include "codegen.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/ADT/APFloat.h"
+#include "llvm/Transforms/Scalar/GVN.h"
+#include "llvm/Transforms/Utils/Mem2Reg.h"
 
+#include "codegen.h"
+#include "MyPass.h"
 
 Codegen::Codegen(){
     TheContext = std::make_unique<llvm::LLVMContext>();
     TheModule = std::make_unique<llvm::Module>("ram-compiler", *TheContext);
     Builder = std::make_unique<llvm::IRBuilder<>>(*TheContext);
+    
+    TheFPM = std::make_unique<llvm::FunctionPassManager>();
+    TheLAM = std::make_unique<llvm::LoopAnalysisManager>();
+    TheFAM = std::make_unique<llvm::FunctionAnalysisManager>();
+    TheCGAM = std::make_unique<llvm::CGSCCAnalysisManager>();
+    TheMAM = std::make_unique<llvm::ModuleAnalysisManager>();
+
+    llvm::PassBuilder PB;
+    PB.registerLoopAnalyses(*TheLAM);
+    PB.registerFunctionAnalyses(*TheFAM);
+    PB.registerCGSCCAnalyses(*TheCGAM);
+    PB.registerModuleAnalyses(*TheMAM);
+
+    PB.crossRegisterProxies(*TheLAM, *TheFAM, *TheCGAM, *TheMAM);
+
+    TheFPM->addPass(llvm::PromotePass()); 
+    TheFPM->addPass(llvm::GVNPass());  
+    TheFPM->addPass(MyPass()); 
+
 }
 
 void logerror(const char* str){
@@ -43,6 +65,7 @@ void Codegen::visit(FunctionDecl& node){
     }
     node.body->accept(*this);
     llvm::verifyFunction(*function);
+    TheFPM->run(*function,*TheFAM);
 }
 
 void Codegen::visit(Block& node){
@@ -58,8 +81,6 @@ void Codegen::visit(DeclRefExpr& node){
         lastValue=nullptr;
         return;
      }
-     // If it's an AllocaInst (variable), we need to load it
-     // If it's a function parameter, it's already a value
      if (llvm::isa<llvm::AllocaInst>(value)) {
          lastValue = Builder->CreateLoad(
              llvm::cast<llvm::AllocaInst>(value)->getAllocatedType(),
@@ -67,7 +88,6 @@ void Codegen::visit(DeclRefExpr& node){
              node.identifier
          );
      } else {
-         // It's a direct value (parameter)
          lastValue = value;
      }
 }
