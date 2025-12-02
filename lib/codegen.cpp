@@ -3,6 +3,9 @@
 #include "llvm/ADT/APFloat.h"
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/Transforms/Utils/Mem2Reg.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/FileSystem.h"
+#include <system_error> 
 
 #include "codegen.h"
 #include "MyPass.h"
@@ -27,7 +30,7 @@ Codegen::Codegen(){
     PB.crossRegisterProxies(*TheLAM, *TheFAM, *TheCGAM, *TheMAM);
 
     TheFPM->addPass(llvm::PromotePass()); 
-    TheFPM->addPass(llvm::GVNPass());  
+    // TheFPM->addPass(llvm::GVNPass());  
     TheFPM->addPass(MyPass()); 
 
 }
@@ -40,7 +43,18 @@ void Codegen::generate(std::vector<std::unique_ptr<FunctionDecl>> & functions){
        for(auto &func : functions){
         func->accept(*this);
        }
-       TheModule->print(llvm::errs(),nullptr);
+       std::error_code EC;
+    llvm::raw_fd_ostream OS("Output.ll", EC, llvm::sys::fs::OF_None);
+    if (EC) {
+        llvm::errs() << "Error opening file: " << EC.message() << "\n";
+        return;
+    }
+
+    TheModule->print(OS, nullptr); 
+    OS.flush(); 
+
+    llvm::outs() << "LLVM IR written to " << "Output.ll" << "\n";
+
 }
 
 void Codegen::visit(FunctionDecl& node){

@@ -23,20 +23,20 @@ target_include_directories(ram-compiler PRIVATE
 )
 
 # Build MyPass as a loadable plugin (shared library)
-add_library(MyPass MODULE
-    Mypass.cpp
-)
+# add_library(MyPass MODULE
+#     Mypass.cpp
+# )
 
-# Link MyPass against LLVM libraries
-target_link_libraries(MyPass PRIVATE ${llvm_libs})
+# # Link MyPass against LLVM libraries
+# target_link_libraries(MyPass PRIVATE ${llvm_libs})
 
-target_include_directories(MyPass PRIVATE
-    ${PROJECT_SOURCE_DIR}/include
-    ${PROJECT_BINARY_DIR}/include
-)
+# target_include_directories(MyPass PRIVATE
+#     ${PROJECT_SOURCE_DIR}/include
+#     ${PROJECT_BINARY_DIR}/include
+# )
 
-# Set proper flags for the plugin
-set_target_properties(MyPass PROPERTIES
-    PREFIX ""  # Don't add 'lib' prefix
-    SUFFIX ".so"  # Use .so extension
-)
+# # Set proper flags for the plugin
+# set_target_properties(MyPass PROPERTIES
+#     PREFIX ""  # Don't add 'lib' prefix
+#     SUFFIX ".so"  # Use .so extension
+# )
