@@ -7,8 +7,10 @@
 #include "llvm/Support/FileSystem.h"
 #include <system_error> 
 
+
 #include "codegen.h"
 #include "MyPass.h"
+#include "MyPassBBmerge.h"
 
 Codegen::Codegen(){
     TheContext = std::make_unique<llvm::LLVMContext>();
@@ -30,8 +32,10 @@ Codegen::Codegen(){
     PB.crossRegisterProxies(*TheLAM, *TheFAM, *TheCGAM, *TheMAM);
 
     TheFPM->addPass(llvm::PromotePass()); 
+
     // TheFPM->addPass(llvm::GVNPass());  
     TheFPM->addPass(MyPass()); 
+    TheFPM->addPass(MyPassBBmerge());
 
 }
 
@@ -65,7 +69,7 @@ void Codegen::visit(FunctionDecl& node){
       paramTypes.emplace_back(GenerateType(param->type));
     
     llvm::FunctionType* functype = llvm::FunctionType::get(funtype,paramTypes,false);
-    auto function= llvm::Function::Create(functype,llvm::Function::ExternalLinkage,node.identifier == "main"? "__main": node.identifier,*TheModule);
+    auto function= llvm::Function::Create(functype,llvm::Function::ExternalLinkage, node.identifier,*TheModule);
     
     llvm::BasicBlock* entry = llvm::BasicBlock::Create(*TheContext, "", function);
     Builder->SetInsertPoint(entry);
@@ -78,6 +82,9 @@ void Codegen::visit(FunctionDecl& node){
      ++idx;
     }
     node.body->accept(*this);
+    if (funtype->isVoidTy() && !Builder->GetInsertBlock()->getTerminator()) {
+        Builder->CreateRetVoid(); 
+    }
     llvm::verifyFunction(*function);
     TheFPM->run(*function,*TheFAM);
 }
@@ -318,4 +325,125 @@ void Codegen::visit(AssignmentExpr& node) {
         return;
     }
     Builder->CreateStore(lastValue, variable);
+}
+
+void Codegen::visit(BooleanLiteral& node) {
+    double value = node.value ? 1.0 : 0.0;
+    lastValue = llvm::ConstantFP::get(*TheContext, llvm::APFloat(value));
+}
+
+void Codegen::visit(IfStmt& node) {
+    node.condition->accept(*this);
+    llvm::Value* condValue = lastValue;
+    
+    if (!condValue) {
+        logerror("Failed to generate if condition");
+        return;
+    }
+    
+    // Convert condition to boolean by comparing with 0.0
+    llvm::Value* condBool;
+    if (condValue->getType()->isDoubleTy()) {
+        condBool = Builder->CreateFCmpONE(
+            condValue, 
+            llvm::ConstantFP::get(*TheContext, llvm::APFloat(0.0)), 
+            "ifcond"
+        );
+    } else if (condValue->getType()->isIntegerTy(1)) {
+        condBool = condValue;
+    } else {
+        logerror("Invalid type for if condition");
+        return;
+    }
+    
+    llvm::Function* function = Builder->GetInsertBlock()->getParent();
+    
+    // Create blocks for then, else, and merge
+    llvm::BasicBlock* thenBB = llvm::BasicBlock::Create(*TheContext, "then", function);
+    llvm::BasicBlock* elseBB = node.elseBlock ? 
+        llvm::BasicBlock::Create(*TheContext, "else") : nullptr;
+    llvm::BasicBlock* mergeBB = llvm::BasicBlock::Create(*TheContext, "ifcont");
+    
+    // Branch based on condition
+    if (elseBB) {
+        Builder->CreateCondBr(condBool, thenBB, elseBB);
+    } else {
+        Builder->CreateCondBr(condBool, thenBB, mergeBB);
+    }
+    
+    // Generate then block
+    Builder->SetInsertPoint(thenBB);
+    node.thenBlock->accept(*this);
+    if (!Builder->GetInsertBlock()->getTerminator()) {
+        Builder->CreateBr(mergeBB);
+    }
+    
+    // Generate else block if it exists
+    if (elseBB) {
+        function->insert(function->end(), elseBB);
+        Builder->SetInsertPoint(elseBB);
+        node.elseBlock->accept(*this);
+        if (!Builder->GetInsertBlock()->getTerminator()) {
+            Builder->CreateBr(mergeBB);
+        }
+    }
+    
+    // Generate merge block
+    function->insert(function->end(), mergeBB);
+    Builder->SetInsertPoint(mergeBB);
+    
+    lastValue = nullptr;
+}
+
+void Codegen::visit(WhileStmt& node) {
+    llvm::Function* function = Builder->GetInsertBlock()->getParent();
+    
+    // Create blocks for condition, body, and after loop
+    llvm::BasicBlock* condBB = llvm::BasicBlock::Create(*TheContext, "whilecond", function);
+    llvm::BasicBlock* bodyBB = llvm::BasicBlock::Create(*TheContext, "whilebody");
+    llvm::BasicBlock* afterBB = llvm::BasicBlock::Create(*TheContext, "afterwhile");
+    
+    // Branch to condition block
+    Builder->CreateBr(condBB);
+    
+    // Generate condition block
+    Builder->SetInsertPoint(condBB);
+    node.condition->accept(*this);
+    llvm::Value* condValue = lastValue;
+    
+    if (!condValue) {
+        logerror("Failed to generate while condition");
+        return;
+    }
+    
+    // Convert condition to boolean
+    llvm::Value* condBool;
+    if (condValue->getType()->isDoubleTy()) {
+        condBool = Builder->CreateFCmpONE(
+            condValue, 
+            llvm::ConstantFP::get(*TheContext, llvm::APFloat(0.0)), 
+            "whilecond"
+        );
+    } else if (condValue->getType()->isIntegerTy(1)) {
+        condBool = condValue;
+    } else {
+        logerror("Invalid type for while condition");
+        return;
+    }
+    
+    Builder->CreateCondBr(condBool, bodyBB, afterBB);
+    
+    // Generate body block
+    function->insert(function->end(), bodyBB);
+    Builder->SetInsertPoint(bodyBB);
+    node.body->accept(*this);
+    if (!Builder->GetInsertBlock()->getTerminator()) {
+        Builder->CreateBr(condBB);  // Loop back to condition
+    }
+    
+    // Generate after block
+    function->insert(function->end(), afterBB);
+    Builder->SetInsertPoint(afterBB);
+    
+    lastValue = nullptr;
 }

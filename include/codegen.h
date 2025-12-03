@@ -51,11 +51,14 @@ class Codegen : public ASTVisitor{
 
     void visit(NumberLiteral& node) override;
     void visit(StringLiteral& node) override ;
+    void visit(BooleanLiteral& node) override;
     void visit(Block& node) override;
     void visit(DeclRefExpr& node) override;
     void visit(CallExpr& node) override; 
     void visit(Stmt& node) override;
     void visit(ReturnStmt& node) override;
+    void visit(IfStmt& node) override;
+    void visit(WhileStmt& node) override;
     void visit(Expr& node) override;
 
     void visit(FunctionDecl& node) override;

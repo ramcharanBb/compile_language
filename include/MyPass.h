@@ -13,6 +13,12 @@ class MyPass : public llvm::PassInfoMixin<MyPass> {
 public:
     llvm::PreservedAnalyses run(llvm::Function &F, llvm::FunctionAnalysisManager &FAM);
     static llvm::StringRef name() { return "MyPass"; }
+private:
+bool make_instruction_dead(llvm::Instruction *instr, 
+                           std::set<llvm::Instruction*> &nextdelinstructs, 
+                           llvm::TargetLibraryInfo &info);
+bool elim_dead_code(llvm::Function &F, llvm::TargetLibraryInfo &info);
+
 };
 
 

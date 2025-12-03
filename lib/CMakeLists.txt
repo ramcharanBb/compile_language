@@ -4,6 +4,7 @@ add_executable(ram-compiler
     parser.cpp
     codegen.cpp
     Mypass.cpp
+    MyPassBBmerge.cpp 
 )
 
 # Map LLVM components to the actual libraries you need

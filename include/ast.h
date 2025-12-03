@@ -30,6 +30,8 @@ public:
     virtual void visit(class Block         &node) = 0;
     virtual void visit(class PrintExpr     &node) = 0;
     virtual void visit(class ReturnStmt    &node) =0;
+    virtual void visit(class IfStmt        &node) = 0;
+    virtual void visit(class WhileStmt     &node) = 0;
 
     virtual void visit(class Decl          &node) = 0;
     virtual void visit(class ParamDecl     &node) = 0;
@@ -39,6 +41,7 @@ public:
     virtual void visit(class Expr          &node) = 0;
     virtual void visit(class NumberLiteral &node) = 0;
     virtual void visit(class StringLiteral &node) = 0;
+    virtual void visit(class BooleanLiteral &node) = 0;
     virtual void visit(class DeclRefExpr   &node) = 0;
     virtual void visit(class CallExpr      &node) = 0;
     virtual void visit(class BinaryExpr    &node) = 0;
@@ -157,6 +160,17 @@ public:
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
+class BooleanLiteral : public Expr {
+public:
+    bool value;
+    
+    BooleanLiteral(SourceLocation loc, bool v)
+        : ASTNode(loc), Expr(loc), value(v) {
+        resolvedType = Type::NUMBER;  // Treat booleans as numbers (0/1)
+    }
+    void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
+};
+
 class DeclRefExpr : public Expr {
 public:
     std::string identifier;
@@ -183,6 +197,39 @@ class ReturnStmt : public Stmt{
       ReturnStmt(SourceLocation location, std::unique_ptr<Expr> expr)
       : ASTNode(location), Stmt(location),
         expr(std::move(expr)) {}
+    void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
+};
+
+class IfStmt : public Stmt {
+public:
+    std::unique_ptr<Expr> condition;
+    std::unique_ptr<Block> thenBlock;
+    std::unique_ptr<Block> elseBlock;  // Optional
+
+    IfStmt(SourceLocation loc,
+           std::unique_ptr<Expr> cond,
+           std::unique_ptr<Block> thenB,
+           std::unique_ptr<Block> elseB = nullptr)
+        : ASTNode(loc), Stmt(loc),
+          condition(std::move(cond)),
+          thenBlock(std::move(thenB)),
+          elseBlock(std::move(elseB)) {}
+
+    void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
+};
+
+class WhileStmt : public Stmt {
+public:
+    std::unique_ptr<Expr> condition;
+    std::unique_ptr<Block> body;
+
+    WhileStmt(SourceLocation loc,
+              std::unique_ptr<Expr> cond,
+              std::unique_ptr<Block> b)
+        : ASTNode(loc), Stmt(loc),
+          condition(std::move(cond)),
+          body(std::move(b)) {}
+
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
 
@@ -298,6 +345,36 @@ public:
     }
     currentLevel = oldLevel;
     }
+
+    void visit(IfStmt &node) override {
+        dumpHeader("IfStmt:");
+        size_t oldLevel = currentLevel;
+        currentLevel++;
+        dumpHeader("Condition:");
+        currentLevel++;
+        node.condition->accept(*this);
+        currentLevel--;
+        dumpHeader("Then:");
+        node.thenBlock->accept(*this);
+        if (node.elseBlock) {
+            dumpHeader("Else:");
+            node.elseBlock->accept(*this);
+        }
+        currentLevel = oldLevel;
+    }
+
+    void visit(WhileStmt &node) override {
+        dumpHeader("WhileStmt:");
+        size_t oldLevel = currentLevel;
+        currentLevel++;
+        dumpHeader("Condition:");
+        currentLevel++;
+        node.condition->accept(*this);
+        currentLevel--;
+        dumpHeader("Body:");
+        node.body->accept(*this);
+        currentLevel = oldLevel;
+    }
     
     /* Expressions */
     void visit(Expr &node) override { 
@@ -314,6 +391,11 @@ public:
         std::string typeInfo = node.resolvedType ? 
             " : " + typeToString(*node.resolvedType) : "";
         dumpHeader("StringLiteral: " + node.value + typeInfo); 
+    }
+    void visit(BooleanLiteral &node) override { 
+        std::string typeInfo = node.resolvedType ? 
+            " : " + typeToString(*node.resolvedType) : "";
+        dumpHeader("BooleanLiteral: " + std::string(node.value ? "true" : "false") + typeInfo); 
     }
     void visit(DeclRefExpr &node) override { 
         std::string typeInfo = node.resolvedType ? 

@@ -34,6 +34,9 @@ class Parser{
     std::unique_ptr<Stmt> parseStmt();
     std::unique_ptr<VariableDecl> parseVariableDecl();
     std::unique_ptr<FunctionDecl> parseFunction();
+    std::unique_ptr<Stmt> parseIfStmt();
+    std::unique_ptr<Stmt> parseWhileStmt();
+    std::unique_ptr<Expr> parseBooleanExpr();
     
     
    public:
