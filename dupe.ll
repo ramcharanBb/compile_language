@@ -57,22 +57,28 @@ ifcont18:                                         ; preds = %then15, %whilebody
   br label %whilecond
 
 afterwhile:                                       ; preds = %whilecond
+  br i1 true, label %then21, label %else23
+
+then21:                                           ; preds = %afterwhile
   %printfCall22 = call i32 (ptr, ...) @printf(ptr @fmt.1, ptr @str.3)
   br label %ifcont25
 
-else23:                                           ; No predecessors!
+else23:                                           ; preds = %afterwhile
   %printfCall24 = call i32 (ptr, ...) @printf(ptr @fmt.1, ptr @str.4)
   br label %ifcont25
 
-ifcont25:                                         ; preds = %else23, %afterwhile
-  %printfCall29 = call i32 (ptr, ...) @printf(ptr @fmt.1, ptr @str.6)
-  br label %ifcont30
+ifcont25:                                         ; preds = %else23, %then21
+  br i1 false, label %then26, label %else28
 
-then26:                                           ; No predecessors!
+then26:                                           ; preds = %ifcont25
   %printfCall27 = call i32 (ptr, ...) @printf(ptr @fmt.1, ptr @str.5)
   br label %ifcont30
 
-ifcont30:                                         ; preds = %ifcont25, %then26
+else28:                                           ; preds = %ifcont25
+  %printfCall29 = call i32 (ptr, ...) @printf(ptr @fmt.1, ptr @str.6)
+  br label %ifcont30
+
+ifcont30:                                         ; preds = %else28, %then26
   %magic_num = alloca double, align 8
   store double 3.600000e+01, ptr %magic_num, align 8
   %magic_num31 = load double, ptr %magic_num, align 8
