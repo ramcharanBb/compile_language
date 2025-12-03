@@ -210,6 +210,13 @@ int Parser::getTokPrecedence() {
     }
 }
 
+std::unique_ptr<Expr> Parser::parseBooleanExpr() {
+    bool value = (nextToken.kind == TokenKind::cf_true);
+    auto literal = std::make_unique<BooleanLiteral>(nextToken.location, value);
+    skipToken();
+    return literal;
+}
+
 std::unique_ptr<Expr> Parser::parsePrimaryExpr() {
     switch (nextToken.kind){
         default:
@@ -226,6 +233,9 @@ std::unique_ptr<Expr> Parser::parsePrimaryExpr() {
             return parseIdentifierExpr();
         case TokenKind::print:
             return parsePrintExpr();
+        case TokenKind::cf_true:
+        case TokenKind::cf_false:
+            return parseBooleanExpr();
     }
 }
 
@@ -280,9 +290,100 @@ std::unique_ptr<Expr> Parser::parseExpr(){
 }
 
 
+std::unique_ptr<Stmt> Parser::parseIfStmt() {
+    SourceLocation location = nextToken.location;
+    skipToken(); // skip 'if'
+    
+    if (nextToken.kind != TokenKind::lpar) {
+        error(nextToken.location, "expected '(' after 'if'");
+        return nullptr;
+    }
+    skipToken(); // skip '('
+    
+    auto condition = parseExpr();
+    if (!condition) {
+        error(nextToken.location, "expected condition expression in if statement");
+        return nullptr;
+    }
+    
+    if (nextToken.kind != TokenKind::rpar) {
+        error(nextToken.location, "expected ')' after if condition");
+        return nullptr;
+    }
+    skipToken(); // skip ')'
+    
+    if (nextToken.kind != TokenKind::lbrace) {
+        error(nextToken.location, "expected '{' after if condition");
+        return nullptr;
+    }
+    
+    auto thenBlock = parseBlock();
+    if (!thenBlock) {
+        return nullptr;
+    }
+    
+    std::unique_ptr<Block> elseBlock;
+    if (nextToken.kind == TokenKind::cf_else) {
+        skipToken(); // skip 'else'
+        
+        if (nextToken.kind != TokenKind::lbrace) {
+            error(nextToken.location, "expected '{' after 'else'");
+            return nullptr;
+        }
+        
+        elseBlock = parseBlock();
+        if (!elseBlock) {
+            return nullptr;
+        }
+    }
+    
+    return std::make_unique<IfStmt>(location, std::move(condition), std::move(thenBlock), std::move(elseBlock));
+}
+
+std::unique_ptr<Stmt> Parser::parseWhileStmt() {
+    SourceLocation location = nextToken.location;
+    skipToken(); // skip 'while'
+    
+    if (nextToken.kind != TokenKind::lpar) {
+        error(nextToken.location, "expected '(' after 'while'");
+        return nullptr;
+    }
+    skipToken(); // skip '('
+    
+    auto condition = parseExpr();
+    if (!condition) {
+        error(nextToken.location, "expected condition expression in while statement");
+        return nullptr;
+    }
+    
+    if (nextToken.kind != TokenKind::rpar) {
+        error(nextToken.location, "expected ')' after while condition");
+        return nullptr;
+    }
+    skipToken(); // skip ')'
+    
+    if (nextToken.kind != TokenKind::lbrace) {
+        error(nextToken.location, "expected '{' after while condition");
+        return nullptr;
+    }
+    
+    auto body = parseBlock();
+    if (!body) {
+        return nullptr;
+    }
+    
+    return std::make_unique<WhileStmt>(location, std::move(condition), std::move(body));
+}
+
 std::unique_ptr<Stmt> Parser::parseStmt() {
     if (nextToken.kind == TokenKind::cf_return)
             return parseReturnStmt();
+    
+    if (nextToken.kind == TokenKind::cf_if)
+            return parseIfStmt();
+    
+    if (nextToken.kind == TokenKind::cf_while)
+            return parseWhileStmt();
     
     if (nextToken.kind == TokenKind::cf_int) {
         auto varDecl = parseVariableDecl();

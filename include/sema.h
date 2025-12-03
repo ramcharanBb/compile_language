@@ -228,6 +228,9 @@ class SemanticAnalysis {
         if (dynamic_cast<NumberLiteral *>(&expr)) {
             return true;
         }
+        if (dynamic_cast<BooleanLiteral *>(&expr)) {
+            return true;  // Boolean literals already have resolvedType set
+        }
         if (auto dre = dynamic_cast<DeclRefExpr *>(&expr)) {
             return resolveDeclRefExpr(*dre);
         }
@@ -259,9 +262,71 @@ class SemanticAnalysis {
         }
         return true;
   }
+  
+  bool resolveIfStmt(IfStmt &ifStmt) {
+      // Resolve condition
+      if (!resolveExpr(*ifStmt.condition)) {
+          return false;
+      }
+      
+      // Condition should be a number (we treat numbers as booleans)
+      if (ifStmt.condition->resolvedType != Type::NUMBER) {
+          error(ifStmt.condition->location, "if condition must be a number");
+          return false;
+      }
+      
+      // Resolve then block
+      scopes.emplace_back();
+      bool thenOk = resolveBody(*ifStmt.thenBlock);
+      scopes.pop_back();
+      
+      if (!thenOk) {
+          return false;
+      }
+      
+      // Resolve else block if present
+      if (ifStmt.elseBlock) {
+          scopes.emplace_back();
+          bool elseOk = resolveBody(*ifStmt.elseBlock);
+          scopes.pop_back();
+          
+          if (!elseOk) {
+              return false;
+          }
+      }
+      
+      return true;
+  }
+  
+  bool resolveWhileStmt(WhileStmt &whileStmt) {
+      // Resolve condition
+      if (!resolveExpr(*whileStmt.condition)) {
+          return false;
+      }
+      
+      // Condition should be a number
+      if (whileStmt.condition->resolvedType != Type::NUMBER) {
+          error(whileStmt.condition->location, "while condition must be a number");
+          return false;
+      }
+      
+      // Resolve body
+      scopes.emplace_back();
+      bool bodyOk = resolveBody(*whileStmt.body);
+      scopes.pop_back();
+      
+      return bodyOk;
+  }
+  
     bool resolveStmt(Stmt &stmt) {
         if (auto rstmt  = dynamic_cast<ReturnStmt *>(&stmt)) {
             return resolveReturnStmt(rstmt);
+        }
+        if (auto ifStmt = dynamic_cast<IfStmt *>(&stmt)) {
+            return resolveIfStmt(*ifStmt);
+        }
+        if (auto whileStmt = dynamic_cast<WhileStmt *>(&stmt)) {
+            return resolveWhileStmt(*whileStmt);
         }
         if (auto varDecl = dynamic_cast<VariableDecl *>(&stmt)) {
             return resolveVariableDecl(*varDecl);

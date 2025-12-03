@@ -7,7 +7,7 @@
 #include "llvm/IR/BasicBlock.h"
 #include "llvm/Support/raw_ostream.h"
 
-bool make_instruction_dead(llvm::Instruction *instr, 
+bool MyPass::make_instruction_dead(llvm::Instruction *instr, 
                            std::set<llvm::Instruction*> &nextdelinstructs, 
                            llvm::TargetLibraryInfo &info) {
     if (llvm::isInstructionTriviallyDead(instr, &info)) {
@@ -31,15 +31,16 @@ bool make_instruction_dead(llvm::Instruction *instr,
     }
 }
                          
-bool elim_dead_code(llvm::Function &F, llvm::TargetLibraryInfo &info) {
+bool MyPass::elim_dead_code(llvm::Function &F, llvm::TargetLibraryInfo &info) {
     bool changed = false;
     std::set<llvm::Instruction *> nextdelinstructs;
     
-    for (llvm::Instruction &instr : llvm::make_early_inc_range(llvm::instructions(F))) {
+    for (llvm::BasicBlock &BB : F) {
+    for (llvm::Instruction &instr : llvm::make_early_inc_range(BB)) {
         if (!nextdelinstructs.count(&instr)) {
             changed |= make_instruction_dead(&instr, nextdelinstructs, info);
         }
-    }
+    }}
     
     while (!nextdelinstructs.empty()) {
         auto it = nextdelinstructs.begin();
