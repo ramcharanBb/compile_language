@@ -11,6 +11,7 @@
 #include "codegen.h"
 #include "MyPass.h"
 #include "MyPassBBmerge.h"
+#include "SEPass.h"
 
 Codegen::Codegen(){
     TheContext = std::make_unique<llvm::LLVMContext>();
@@ -36,6 +37,7 @@ Codegen::Codegen(){
     // TheFPM->addPass(llvm::GVNPass());  
     TheFPM->addPass(MyPass()); 
     TheFPM->addPass(MyPassBBmerge());
+    TheFPM->addPass(SEPass());
 
 }
 
@@ -138,6 +140,8 @@ void Codegen::visit(PrintExpr& node){
             argsP.push_back(lastValue);
             if (lastValue->getType()->isDoubleTy()) {
                 formatStr += "%f ";
+            } else if (lastValue->getType()->isIntegerTy()) {
+                formatStr += "%d ";
             } else if (lastValue->getType()->isPointerTy()) {
                 formatStr += "%s ";
             }
@@ -191,9 +195,15 @@ void Codegen::visit(CallExpr& node){
 }
 
 void Codegen::visit(NumberLiteral& node) {
-    lastValue = llvm::ConstantFP::get(*TheContext, 
-        llvm::APFloat(llvm::APFloat::IEEEdouble(), llvm::StringRef(node.value))
-    );
+    if (node.value.find('.') != std::string::npos) {
+        lastValue = llvm::ConstantFP::get(*TheContext, 
+            llvm::APFloat(llvm::APFloat::IEEEdouble(), llvm::StringRef(node.value))
+        );
+    } else {
+        lastValue = llvm::ConstantInt::get(*TheContext, 
+            llvm::APInt(64, std::stoll(node.value))
+        );
+    }
 }
 
 
@@ -222,72 +232,82 @@ void Codegen::visit(BinaryExpr& node) {
         lastValue = nullptr;
         return;
     }
+
+    bool isDouble = left->getType()->isDoubleTy() || right->getType()->isDoubleTy();
+
+    if (isDouble) {
+        if (!left->getType()->isDoubleTy())
+             left = Builder->CreateUIToFP(left, llvm::Type::getDoubleTy(*TheContext), "casttmp");
+        if (!right->getType()->isDoubleTy())
+             right = Builder->CreateUIToFP(right, llvm::Type::getDoubleTy(*TheContext), "casttmp");
+    }
+
     switch (node.op) {
         case TokenKind::plus:
-            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+            if (isDouble)
                 lastValue = Builder->CreateFAdd(left, right, "addtmp");
             else
-                logerror("Invalid types for addition");
+                lastValue = Builder->CreateAdd(left, right, "addtmp");
             break;
         case TokenKind::minus:
-            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+            if (isDouble)
                 lastValue = Builder->CreateFSub(left, right, "subtmp");
             else
-                logerror("Invalid types for subtraction");
+                lastValue = Builder->CreateSub(left, right, "subtmp");
             break;
         case TokenKind::mul:
-            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+            if (isDouble)
                 lastValue = Builder->CreateFMul(left, right, "multmp");
             else
-                logerror("Invalid types for multiplication");
+                lastValue = Builder->CreateMul(left, right, "multmp");
             break;
         case TokenKind::slash:
-            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+            if (isDouble)
                 lastValue = Builder->CreateFDiv(left, right, "divtmp");
             else
-                logerror("Invalid types for division");
+                lastValue = Builder->CreateSDiv(left, right, "divtmp");
             break;
         case TokenKind::percent:
-            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+            if (isDouble)
                 lastValue = Builder->CreateFRem(left, right, "modtmp");
             else
-                logerror("Invalid types for modulo");
+                lastValue = Builder->CreateSRem(left, right, "modtmp");
             break;
         case TokenKind::lessthan:
-            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+            if (isDouble)
                 lastValue = Builder->CreateFCmpOLT(left, right, "cmptmp");
             else
-                logerror("Invalid types for less than");
+                lastValue = Builder->CreateICmpSLT(left, right, "cmptmp");
             break;
         case TokenKind::greaterthan:
-            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+            if (isDouble)
                 lastValue = Builder->CreateFCmpOGT(left, right, "cmptmp");
             else
-                logerror("Invalid types for greater than");
+                lastValue = Builder->CreateICmpSGT(left, right, "cmptmp");
             break;
         case TokenKind::less_equal:
-            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+            if (isDouble)
                 lastValue = Builder->CreateFCmpOLE(left, right, "cmptmp");
             else
-                logerror("Invalid types for less than or equal");
+                lastValue = Builder->CreateICmpSLE(left, right, "cmptmp");
             break;
         case TokenKind::great_equal:
-            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+            if (isDouble)
                 lastValue = Builder->CreateFCmpOGE(left, right, "cmptmp");
             else
-                logerror("Invalid types for greater than or equal");
+                lastValue = Builder->CreateICmpSGE(left, right, "cmptmp");
             break;
         case TokenKind::doublequal:
-            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+            if (isDouble)
                 lastValue = Builder->CreateFCmpOEQ(left, right, "cmptmp");
             else
-                logerror("Invalid types for equality");
+                lastValue = Builder->CreateICmpEQ(left, right, "cmptmp");
             break;
         case TokenKind::not_equal:
-            if (left->getType()->isDoubleTy() && right->getType()->isDoubleTy())
+            if (isDouble)
                 lastValue = Builder->CreateFCmpONE(left, right, "cmptmp");
             else
-                logerror("Invalid types for not equal");
+                lastValue = Builder->CreateICmpNE(left, right, "cmptmp");
             break;
         default:
             logerror("Unknown binary operator");
@@ -342,6 +362,7 @@ void Codegen::visit(IfStmt& node) {
     }
     
     // Convert condition to boolean by comparing with 0.0
+    // Convert condition to boolean
     llvm::Value* condBool;
     if (condValue->getType()->isDoubleTy()) {
         condBool = Builder->CreateFCmpONE(
@@ -349,8 +370,12 @@ void Codegen::visit(IfStmt& node) {
             llvm::ConstantFP::get(*TheContext, llvm::APFloat(0.0)), 
             "ifcond"
         );
-    } else if (condValue->getType()->isIntegerTy(1)) {
-        condBool = condValue;
+    } else if (condValue->getType()->isIntegerTy()) {
+        condBool = Builder->CreateICmpNE(
+            condValue,
+            llvm::ConstantInt::get(condValue->getType(), 0),
+            "ifcond"
+        );
     } else {
         logerror("Invalid type for if condition");
         return;
@@ -424,8 +449,12 @@ void Codegen::visit(WhileStmt& node) {
             llvm::ConstantFP::get(*TheContext, llvm::APFloat(0.0)), 
             "whilecond"
         );
-    } else if (condValue->getType()->isIntegerTy(1)) {
-        condBool = condValue;
+    } else if (condValue->getType()->isIntegerTy()) {
+        condBool = Builder->CreateICmpNE(
+            condValue,
+            llvm::ConstantInt::get(condValue->getType(), 0),
+            "whilecond"
+        );
     } else {
         logerror("Invalid type for while condition");
         return;

@@ -37,6 +37,7 @@ class SemanticAnalysis {
         if (typeSpecifier == "void") return Type::VOID;
         if (typeSpecifier == "string") return Type::STRING;
         if (typeSpecifier == "number") return Type::NUMBER;
+        if (typeSpecifier == "int") return Type::NUMBER;
         return std::nullopt;
     }
 

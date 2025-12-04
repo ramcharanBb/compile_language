@@ -31,9 +31,11 @@ class Codegen : public ASTVisitor{
     std::unique_ptr<llvm::FunctionAnalysisManager> TheFAM;
     std::unique_ptr<llvm::CGSCCAnalysisManager> TheCGAM;
     std::unique_ptr<llvm::ModuleAnalysisManager> TheMAM;
-        llvm::Type *GenerateType(std::string type) {
+    llvm::Type *GenerateType(std::string type) {
     if (type == "number") {
         return llvm::Type::getDoubleTy(*TheContext);
+    } else if (type == "int") {
+        return llvm::Type::getInt64Ty(*TheContext);
     } else if (type == "string") {
         return llvm::PointerType::get(*TheContext, 0); 
     } else if (type == "void") {

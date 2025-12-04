@@ -1,4 +1,5 @@
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
+#include "llvm/IR/Instructions.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/ADT/STLExtras.h" 
 #include "MyPassBBmerge.h"
