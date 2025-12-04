@@ -5,6 +5,7 @@ add_executable(ram-compiler
     codegen.cpp
     Mypass.cpp
     MyPassBBmerge.cpp 
+    SEPass.cpp
 )
 
 # Map LLVM components to the actual libraries you need
@@ -16,7 +17,7 @@ llvm_map_components_to_libnames(llvm_libs
     Analysis
 )
 
-target_link_libraries(ram-compiler PRIVATE ${llvm_libs})
+target_link_libraries(ram-compiler  PRIVATE ${llvm_libs})
 
 target_include_directories(ram-compiler PRIVATE
     ${PROJECT_SOURCE_DIR}/include

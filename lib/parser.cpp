@@ -180,8 +180,8 @@ std::unique_ptr<VariableDecl> Parser::parseVariableDecl(){
         }
     }
     
-    // For now, we only support 'number' type (represented by 'int' keyword)
-    return std::make_unique<VariableDecl>(location, varName, "number", std::move(initializer));
+    // We now support 'int' type
+    return std::make_unique<VariableDecl>(location, varName, "int", std::move(initializer));
 }
 
 
