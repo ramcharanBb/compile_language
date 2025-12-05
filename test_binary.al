@@ -4,7 +4,7 @@ func test_binary(): number {
     print(10 - 2 * 3);
     print(5 > 3);
     print(2 < 8);
-    print(10+4);
+    print(10+1);
     return 0;
 }
 

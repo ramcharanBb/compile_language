@@ -15,6 +15,15 @@ llvm_map_components_to_libnames(llvm_libs
     Passes
     TransformUtils
     Analysis
+    AllTargetsCodeGens
+    AllTargetsInfos
+    AllTargetsDescs
+    AllTargetsMCAs
+    AllTargetsAsmParsers
+    MC
+    MCParser
+    CodeGen
+    Target
 )
 
 target_link_libraries(ram-compiler  PRIVATE ${llvm_libs})

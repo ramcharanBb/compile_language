@@ -53,7 +53,6 @@ bool MyPass::elim_dead_code(llvm::Function &F, llvm::TargetLibraryInfo &info) {
 }
  
 llvm::PreservedAnalyses MyPass::run(llvm::Function &F, llvm::FunctionAnalysisManager &FAM) {
-    llvm::outs() << "MyDCEPass is running on function: " << F.getName() << "\n";
     if (elim_dead_code(F, FAM.getResult<llvm::TargetLibraryAnalysis>(F))) {
         return llvm::PreservedAnalyses::none(); 
     }

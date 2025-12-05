@@ -40,17 +40,15 @@ int main(int argc, const char **argv) {
 
     TheLexer lexer{sourceFile};
 
-    lexer.debugPrintAllTokens();
+    // lexer.debugPrintAllTokens();
 
     Parser parse{lexer};
     auto parsedprogram = parse.parseProgram();
     
-    std::cerr << "\n------------------AST Before Semantic Analysis-----------------------\n";
-    for (auto &&fn : parsedprogram) {
-        fn->dump();
-    }
-    
-    std::cerr << "\n------------------Performing Semantic Analysis-----------------------\n";
+    // std::cerr << "\n------------------AST Before Semantic Analysis-----------------------\n";
+    // for (auto &&fn : parsedprogram) {
+    //     fn->dump();
+    // }
     SemanticAnalysis sema(parsedprogram);
     bool success = sema.resolve();
     
@@ -67,5 +65,15 @@ int main(int argc, const char **argv) {
     Codegen codegen; 
     codegen.generate(parsedprogram);
     std::cerr << "\n\n";
+    
+    // Generate object file
+    std::cerr << "------------------Generating Object File------------------------\n";
+    if (codegen.GenerateObjectFile("output.o")) {
+        std::cerr << "Object file generated successfully: output.o\n";
+    } else {
+        std::cerr << "Failed to generate object file\n";
+        return 1;
+    }
+    
     return 0;
 }

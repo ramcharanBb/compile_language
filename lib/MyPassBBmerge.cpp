@@ -41,7 +41,7 @@ llvm::PreservedAnalyses MyPassBBmerge::run(llvm::Function &F, llvm::FunctionAnal
                     llvm::BasicBlock::iterator InsertPos = TerminatorBB->getIterator();
                     while (!succesorBB->empty()) {
                         llvm::Instruction &Inst = succesorBB->front();
-                        Inst.moveBefore(&*InsertPos); 
+                        Inst.moveBeforePreserving(InsertPos); 
                     }
                     TerminatorBB->eraseFromParent();  
                     blocksneed2del.push_back(succesorBB);
