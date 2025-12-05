@@ -13,7 +13,6 @@ unsigned SEPass::is_power_of_2(llvm::Value *operand){
 llvm::PreservedAnalyses SEPass::run(llvm::Function &F, llvm::FunctionAnalysisManager &FAM){
     bool  changed =false;
     for (auto &BB: F){
-    for (auto &BB: F){
           for (auto I = BB.begin(), E = BB.end(); I != E; ) {
              llvm::Instruction *Inst = &*I++;
              if (Inst->getOpcode() == llvm::Instruction::Mul) {
@@ -44,7 +43,6 @@ llvm::PreservedAnalyses SEPass::run(llvm::Function &F, llvm::FunctionAnalysisMan
                 }
             }
         }
-    }
     }
 
     if (changed) {

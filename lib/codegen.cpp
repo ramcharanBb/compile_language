@@ -8,6 +8,16 @@
 #include <system_error> 
 
 
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Host.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include <optional>
+
+
 #include "codegen.h"
 #include "MyPass.h"
 #include "MyPassBBmerge.h"
@@ -37,8 +47,66 @@ Codegen::Codegen(){
     // TheFPM->addPass(llvm::GVNPass());  
     TheFPM->addPass(MyPass()); 
     TheFPM->addPass(MyPassBBmerge());
-    TheFPM->addPass(SEPass());
+//     TheFPM->addPass(SEPass());
 
+}
+bool Codegen::GenerateObjectFile(std::string filename) {
+  // Initialize all targets
+  llvm::InitializeAllTargetInfos();
+  llvm::InitializeAllTargets();
+  llvm::InitializeAllTargetMCs();
+  llvm::InitializeAllAsmParsers();
+  llvm::InitializeAllAsmPrinters();
+
+  // Get the target triple
+  auto targetTripleStr = llvm::sys::getDefaultTargetTriple();
+llvm::Triple targetTriple(targetTripleStr);
+  TheModule->setTargetTriple(targetTriple);
+
+  // Look up the target
+  std::string error;
+  auto target = llvm::TargetRegistry::lookupTarget(targetTripleStr, error);
+  if (!target) {
+    llvm::errs() << error << "\n";
+    return false;
+  }
+
+  // Create target machine
+  auto CPU = "generic";
+  auto features = "";
+  llvm::TargetOptions opt;
+  std::optional<llvm::Reloc::Model> RM;
+  auto targetMachine = target->createTargetMachine(targetTriple, CPU, features, opt, RM);
+  if (!targetMachine) {
+    llvm::errs() << "Failed to create target machine\n";
+    return false;
+  }
+
+  // Configure module for target
+  TheModule->setDataLayout(targetMachine->createDataLayout());
+
+  // Open output file
+  std::error_code EC;
+  llvm::raw_fd_ostream dest(filename, EC, llvm::sys::fs::OF_None);
+  if (EC) {
+    llvm::errs() << "Could not open file `" << filename << "`: " << EC.message() << "\n";
+    return false;
+  }
+
+  // Create pass manager for emitting code
+  llvm::legacy::PassManager pass;
+  auto fileType = llvm::CodeGenFileType::ObjectFile;
+
+  if (targetMachine->addPassesToEmitFile(pass, dest, nullptr, fileType)) {
+    llvm::errs() << "Target machine can't emit a file of this type\n";
+    return false;
+  }
+
+  // Run passes and generate code
+  pass.run(*TheModule);
+  dest.flush();
+
+  return true;
 }
 
 void logerror(const char* str){
@@ -122,7 +190,21 @@ void Codegen::visit(ReturnStmt& node) {
             lastValue=Builder->CreateRet(lastValue);
         }
         else {
-            lastValue= Builder->CreateRet(llvm::ConstantInt::get(*TheContext, llvm::APInt(64, 0)));
+            // Get the current function's return type
+            llvm::Function* currentFunc = Builder->GetInsertBlock()->getParent();
+            llvm::Type* returnType = currentFunc->getReturnType();
+            
+            // Create appropriate zero constant based on return type
+            llvm::Value* zeroValue;
+            if (returnType->isDoubleTy()) {
+                zeroValue = llvm::ConstantFP::get(*TheContext, llvm::APFloat(0.0));
+            } else if (returnType->isIntegerTy()) {
+                zeroValue = llvm::ConstantInt::get(returnType, 0);
+            } else {
+                // Fallback for other types
+                zeroValue = llvm::Constant::getNullValue(returnType);
+            }
+            lastValue = Builder->CreateRet(zeroValue);
         }
     }
     else{
@@ -130,6 +212,7 @@ void Codegen::visit(ReturnStmt& node) {
     }
     return;
 }
+
 
 void Codegen::visit(PrintExpr& node){
      std::vector<llvm::Value*> argsP;
@@ -195,6 +278,10 @@ void Codegen::visit(CallExpr& node){
 }
 
 void Codegen::visit(NumberLiteral& node) {
+if (node.resolvedType && *node.resolvedType == Type::NUMBER) {
+        double val = std::stod(node.value);
+        lastValue = llvm::ConstantFP::get(*TheContext, llvm::APFloat(val));
+    } else {
     if (node.value.find('.') != std::string::npos) {
         lastValue = llvm::ConstantFP::get(*TheContext, 
             llvm::APFloat(llvm::APFloat::IEEEdouble(), llvm::StringRef(node.value))
@@ -205,6 +292,8 @@ void Codegen::visit(NumberLiteral& node) {
         );
     }
 }
+}
+
 
 
 void Codegen::visit(StringLiteral& node){
@@ -326,7 +415,16 @@ void Codegen::visit(VariableDecl& node) {
     if (node.initializer) {
         node.initializer->accept(*this);
         if (lastValue) {
-            Builder->CreateStore(lastValue, alloca);
+            llvm::Value* valueToStore = lastValue;
+            if (lastValue->getType() != varType) {
+                if (varType->isIntegerTy() && lastValue->getType()->isDoubleTy()) {
+                    valueToStore = Builder->CreateFPToSI(lastValue, varType, "fptosi");
+                }
+                else if (varType->isDoubleTy() && lastValue->getType()->isIntegerTy()) {
+                    valueToStore = Builder->CreateSIToFP(lastValue, varType, "sitofp");
+                }
+            }
+            Builder->CreateStore(valueToStore, alloca);
         }
     }
     lastValue = nullptr;
@@ -344,7 +442,24 @@ void Codegen::visit(AssignmentExpr& node) {
         logerror("Failed to generate RHS of assignment");
         return;
     }
-    Builder->CreateStore(lastValue, variable);
+    
+    // Get the type of the variable (from the alloca)
+    llvm::Type* varType = llvm::cast<llvm::AllocaInst>(variable)->getAllocatedType();
+    llvm::Value* valueToStore = lastValue;
+    
+    // Cast the value to match the variable type if needed
+    if (lastValue->getType() != varType) {
+        // Convert double to int64
+        if (varType->isIntegerTy() && lastValue->getType()->isDoubleTy()) {
+            valueToStore = Builder->CreateFPToSI(lastValue, varType, "fptosi");
+        }
+        // Convert int64 to double
+        else if (varType->isDoubleTy() && lastValue->getType()->isIntegerTy()) {
+            valueToStore = Builder->CreateSIToFP(lastValue, varType, "sitofp");
+        }
+    }
+    
+    Builder->CreateStore(valueToStore, variable);
 }
 
 void Codegen::visit(BooleanLiteral& node) {
