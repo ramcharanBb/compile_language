@@ -30,7 +30,7 @@ enum class TokenKind{
      func,identifier, 
      string_literal, number,print,
      
-     cf_return, cf_if, cf_else, cf_while, cf_var, cf_true, cf_false, cf_int,
+     cf_return, cf_if, cf_else, cf_while, cf_var, cf_true, cf_false, cf_int, cf_float, cf_void,
 };
 
 struct Token{
@@ -66,6 +66,8 @@ struct Token{
             case TokenKind::cf_true: return "TRUE";
             case TokenKind::cf_false: return "FALSE";
             case TokenKind::cf_int: return "INT";
+            case TokenKind::cf_float: return "FLOAT";
+            case TokenKind::cf_void: return "VOID";
             case TokenKind::slash: return "SLASH";
             case TokenKind::percent: return "PERCENT";
             case TokenKind::amp_amp: return "AMP_AMP";

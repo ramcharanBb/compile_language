@@ -35,7 +35,9 @@ class Codegen : public ASTVisitor{
     if (type == "number") {
         return llvm::Type::getDoubleTy(*TheContext);
     } else if (type == "int") {
-        return llvm::Type::getInt64Ty(*TheContext);
+        return llvm::Type::getInt32Ty(*TheContext);
+    } else if (type == "float") {
+        return llvm::Type::getDoubleTy(*TheContext);
     } else if (type == "string") {
         return llvm::PointerType::get(*TheContext, 0); 
     } else if (type == "void") {

@@ -36,8 +36,9 @@ class SemanticAnalysis {
     std::optional<Type> resolveType(const std::string &typeSpecifier) {
         if (typeSpecifier == "void") return Type::VOID;
         if (typeSpecifier == "string") return Type::STRING;
-        if (typeSpecifier == "number") return Type::NUMBER;
-        if (typeSpecifier == "int") return Type::NUMBER;
+        if (typeSpecifier == "number") return Type::FLOAT; // Default number to float for now if generic
+        if (typeSpecifier == "int") return Type::INT;
+        if (typeSpecifier == "float") return Type::FLOAT;
         return std::nullopt;
     }
 
@@ -114,52 +115,60 @@ class SemanticAnalysis {
         }
         
         // For arithmetic operations, both operands must be numbers
+        // For arithmetic operations
         if (bexpr.op == TokenKind::plus || bexpr.op == TokenKind::minus ||
             bexpr.op == TokenKind::mul || bexpr.op == TokenKind::slash ||
             bexpr.op == TokenKind::percent) {
             
-            if (bexpr.left->resolvedType != Type::NUMBER) {
-                error(bexpr.left->location, "left operand of arithmetic operator must be a number");
+            Type leftType = *bexpr.left->resolvedType;
+            Type rightType = *bexpr.right->resolvedType;
+
+            if ((leftType != Type::INT && leftType != Type::FLOAT) ||
+                (rightType != Type::INT && rightType != Type::FLOAT)) {
+                error(bexpr.location, "operands of arithmetic operator must be numbers");
                 return false;
             }
-            if (bexpr.right->resolvedType != Type::NUMBER) {
-                error(bexpr.right->location, "right operand of arithmetic operator must be a number");
-                return false;
+
+            if (leftType == Type::FLOAT || rightType == Type::FLOAT) {
+                bexpr.resolvedType = Type::FLOAT;
+            } else {
+                bexpr.resolvedType = Type::INT;
             }
-            bexpr.resolvedType = Type::NUMBER;
             return true;
         }
         
         // For comparison operations, both operands must be numbers, result is number (0 or 1)
+        // For comparison operations
         if (bexpr.op == TokenKind::lessthan || bexpr.op == TokenKind::greaterthan ||
             bexpr.op == TokenKind::less_equal || bexpr.op == TokenKind::great_equal ||
             bexpr.op == TokenKind::doublequal || bexpr.op == TokenKind::not_equal) {
             
-            if (bexpr.left->resolvedType != Type::NUMBER) {
-                error(bexpr.left->location, "left operand of comparison operator must be a number");
+            Type leftType = *bexpr.left->resolvedType;
+            Type rightType = *bexpr.right->resolvedType;
+
+            if ((leftType != Type::INT && leftType != Type::FLOAT) ||
+                (rightType != Type::INT && rightType != Type::FLOAT)) {
+                error(bexpr.location, "operands of comparison operator must be numbers");
                 return false;
             }
-            if (bexpr.right->resolvedType != Type::NUMBER) {
-                error(bexpr.right->location, "right operand of comparison operator must be a number");
-                return false;
-            }
-            // Comparisons return a boolean, but we represent as NUMBER (0 or 1)
-            bexpr.resolvedType = Type::NUMBER;
+            // Comparisons return a boolean, represented as INT (0 or 1)
+            bexpr.resolvedType = Type::INT;
             return true;
         }
         
         // For logical operations
+        // For logical operations
         if (bexpr.op == TokenKind::amp_amp || bexpr.op == TokenKind::pipe_pipe) {
-            // Logical operations also work on numbers (treated as booleans)
-            if (bexpr.left->resolvedType != Type::NUMBER) {
-                error(bexpr.left->location, "left operand of logical operator must be a number");
+            // Logical operations work on integers (treated as booleans)
+            if (bexpr.left->resolvedType != Type::INT) {
+                error(bexpr.left->location, "left operand of logical operator must be an integer (boolean)");
                 return false;
             }
-            if (bexpr.right->resolvedType != Type::NUMBER) {
-                error(bexpr.right->location, "right operand of logical operator must be a number");
+            if (bexpr.right->resolvedType != Type::INT) {
+                error(bexpr.right->location, "right operand of logical operator must be an integer (boolean)");
                 return false;
             }
-            bexpr.resolvedType = Type::NUMBER;
+            bexpr.resolvedType = Type::INT;
             return true;
         }
         
@@ -186,7 +195,8 @@ class SemanticAnalysis {
             if (!resolveExpr(*varDecl.initializer)) {
                 return false;
             }
-            if (varDecl.initializer->resolvedType != *varType) {
+            Type initType = *varDecl.initializer->resolvedType;
+            if (initType != *varType) {
                 error(varDecl.initializer->location, "initializer type does not match variable type");
                 return false;
             }
@@ -213,12 +223,15 @@ class SemanticAnalysis {
         }
         
         // Check type compatibility
-        if (assignExpr.value->resolvedType != decl->resolvedType) {
+        Type targetType = *decl->resolvedType;
+        Type valueType = *assignExpr.value->resolvedType;
+        
+        if (valueType != targetType) {
             error(assignExpr.value->location, "assignment type mismatch");
             return false;
         }
         
-        assignExpr.resolvedType = decl->resolvedType;
+        assignExpr.resolvedType = targetType;
         return true;
     }
 
@@ -258,9 +271,27 @@ class SemanticAnalysis {
             return false; 
            }
        }
-       if (auto expr = dynamic_cast<Expr *>((stmt->expr).get())) {
-            return resolveExpr(*expr);
-        }
+       
+       if (stmt->expr) {
+            if (!resolveExpr(*stmt->expr)) {
+                return false;
+            }
+            
+            if (currentFunction && stmt->expr->resolvedType) {
+                if (*stmt->expr->resolvedType != *currentFunction->resolvedType) {
+                    error(stmt->location, "return type mismatch: expected " + 
+                          typeToString(*currentFunction->resolvedType) + ", got " + 
+                          typeToString(*stmt->expr->resolvedType));
+                    return false;
+                }
+            }
+       } else {
+           // Return without value
+           if (currentFunction && currentFunction->resolvedType != Type::VOID) {
+               error(stmt->location, "non-void function must return a value");
+               return false;
+           }
+       }
         return true;
   }
   
@@ -270,9 +301,9 @@ class SemanticAnalysis {
           return false;
       }
       
-      // Condition should be a number (we treat numbers as booleans)
-      if (ifStmt.condition->resolvedType != Type::NUMBER) {
-          error(ifStmt.condition->location, "if condition must be a number");
+      // Condition should be an integer (boolean)
+      if (ifStmt.condition->resolvedType != Type::INT) {
+          error(ifStmt.condition->location, "if condition must be an integer (boolean)");
           return false;
       }
       
@@ -305,9 +336,9 @@ class SemanticAnalysis {
           return false;
       }
       
-      // Condition should be a number
-      if (whileStmt.condition->resolvedType != Type::NUMBER) {
-          error(whileStmt.condition->location, "while condition must be a number");
+      // Condition should be an integer (boolean)
+      if (whileStmt.condition->resolvedType != Type::INT) {
+          error(whileStmt.condition->location, "while condition must be an integer (boolean)");
           return false;
       }
       

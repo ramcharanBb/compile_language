@@ -110,7 +110,12 @@ std::unique_ptr<Expr> Parser::parsePrintExpr(){
 }
 
 std::unique_ptr<Expr> Parser::parseNumberExpr() {
-    auto literal = std::make_unique<NumberLiteral>(nextToken.location, nextToken.value.value());
+    std::string val = nextToken.value.value();
+    Type t = Type::INT;
+    if (val.find('.') != std::string::npos) {
+        t = Type::FLOAT;
+    }
+    auto literal = std::make_unique<NumberLiteral>(nextToken.location, val, t);
     skipToken();
     return literal;
 }
@@ -158,7 +163,17 @@ std::unique_ptr<Stmt> Parser::parseReturnStmt(){
 
 std::unique_ptr<VariableDecl> Parser::parseVariableDecl(){
     SourceLocation location = nextToken.location;
-    skipToken(); // skip 'int' token
+    std::string typeName;
+    
+    if (nextToken.kind == TokenKind::cf_int) {
+        typeName = "int";
+    } else if (nextToken.kind == TokenKind::cf_float) {
+        typeName = "float";
+    } else {
+        error(nextToken.location, "expected type name in variable declaration");
+        return nullptr;
+    }
+    skipToken(); // skip type token
     
     if (nextToken.kind != TokenKind::identifier) {
         error(nextToken.location, "expected identifier after type in variable declaration");
@@ -180,8 +195,7 @@ std::unique_ptr<VariableDecl> Parser::parseVariableDecl(){
         }
     }
     
-    // We now support 'int' type
-    return std::make_unique<VariableDecl>(location, varName, "int", std::move(initializer));
+    return std::make_unique<VariableDecl>(location, varName, typeName, std::move(initializer));
 }
 
 
@@ -385,7 +399,7 @@ std::unique_ptr<Stmt> Parser::parseStmt() {
     if (nextToken.kind == TokenKind::cf_while)
             return parseWhileStmt();
     
-    if (nextToken.kind == TokenKind::cf_int) {
+    if (nextToken.kind == TokenKind::cf_int || nextToken.kind == TokenKind::cf_float) {
         auto varDecl = parseVariableDecl();
         if (!varDecl) {
             if (!skipUntil({TokenKind::semi, TokenKind::rbrace}))
@@ -460,11 +474,19 @@ std::unique_ptr<ParamDecl> Parser::parseParams(){
     }
     skipToken(); // skips ':' token
     
-    if(nextToken.kind != TokenKind::identifier){
+    if(nextToken.kind != TokenKind::identifier && 
+       nextToken.kind != TokenKind::cf_int && 
+       nextToken.kind != TokenKind::cf_float &&
+       nextToken.kind != TokenKind::cf_void){ // void might not be valid for params but good for completeness
         error(nextToken.location, "expected type name after ':'");
         return nullptr;
     }
-    std::string typname(nextToken.value.value());
+    std::string typname;
+    if (nextToken.kind == TokenKind::identifier) typname = nextToken.value.value();
+    else if (nextToken.kind == TokenKind::cf_int) typname = "int";
+    else if (nextToken.kind == TokenKind::cf_float) typname = "float";
+    else if (nextToken.kind == TokenKind::cf_void) typname = "void";
+    
     skipToken();// skips 'parameter type' token
     return std::make_unique<ParamDecl>(paramloc, paramname, typname);
 }
@@ -519,11 +541,19 @@ std::unique_ptr<FunctionDecl> Parser::parseFunction() {
     }
     skipToken();// skips ':' token
     
-    if (nextToken.kind != TokenKind::identifier){
+    if (nextToken.kind != TokenKind::identifier && 
+        nextToken.kind != TokenKind::cf_int && 
+        nextToken.kind != TokenKind::cf_float && 
+        nextToken.kind != TokenKind::cf_void){
         error(nextToken.location, "expected return type after ':'");
         return nullptr;
     }
-    std::string funcType = nextToken.value.value();
+    std::string funcType;
+    if (nextToken.kind == TokenKind::identifier) funcType = nextToken.value.value();
+    else if (nextToken.kind == TokenKind::cf_int) funcType = "int";
+    else if (nextToken.kind == TokenKind::cf_float) funcType = "float";
+    else if (nextToken.kind == TokenKind::cf_void) funcType = "void";
+
     skipToken(); // skips func type token
 
     if (nextToken.kind != TokenKind::lbrace){

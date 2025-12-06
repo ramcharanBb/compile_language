@@ -11,11 +11,12 @@
 #include "utils.h"
 #include "token.h"
 
-enum class Type { NUMBER, STRING, VOID };
+enum class Type { INT, FLOAT, STRING, VOID };
 
 inline std::string typeToString(Type t) {
     switch (t) {
-        case Type::NUMBER: return "number";
+        case Type::INT: return "int";
+        case Type::FLOAT: return "float";
         case Type::STRING: return "string";
         case Type::VOID: return "void";
     }
@@ -142,9 +143,9 @@ class NumberLiteral : public Expr {
 public:
     std::string value;
     
-    NumberLiteral(SourceLocation loc, std::string v)
+    NumberLiteral(SourceLocation loc, std::string v, Type t)
         : ASTNode(loc), Expr(loc), value(std::move(v)) {
-        resolvedType = Type::NUMBER; 
+        resolvedType = t; 
     }
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
@@ -166,7 +167,7 @@ public:
     
     BooleanLiteral(SourceLocation loc, bool v)
         : ASTNode(loc), Expr(loc), value(v) {
-        resolvedType = Type::NUMBER;  // Treat booleans as numbers (0/1)
+        resolvedType = Type::INT;  // Treat booleans as integers (0/1)
     }
     void accept(ASTVisitor &visitor) override { visitor.visit(*this); }
 };
