@@ -1,7 +1,0 @@
-func add(x: number, y: number): number {
-    return x + y;
-}
-
-func main(): void {
-    add(5.0, 10.0);
-}
