@@ -184,33 +184,37 @@ void Codegen::visit(DeclRefExpr& node){
 }
 
 void Codegen::visit(ReturnStmt& node) {
+    llvm::Function* currentFunc = Builder->GetInsertBlock()->getParent();
+    llvm::Type* returnType = currentFunc->getReturnType();
+
     if(node.expr){
         node.expr->accept(*this);
         if(lastValue){
-            lastValue=Builder->CreateRet(lastValue);
+            // Cast to return type if needed
+            if (lastValue->getType() != returnType) {
+                logerror("Return type mismatch");
+                Builder->CreateRet(llvm::UndefValue::get(returnType));
+                return;
+            }
+            Builder->CreateRet(lastValue);
         }
         else {
-            // Get the current function's return type
-            llvm::Function* currentFunc = Builder->GetInsertBlock()->getParent();
-            llvm::Type* returnType = currentFunc->getReturnType();
-            
-            // Create appropriate zero constant based on return type
+            // Error handling or default?
+             // Create appropriate zero constant based on return type
             llvm::Value* zeroValue;
             if (returnType->isDoubleTy()) {
                 zeroValue = llvm::ConstantFP::get(*TheContext, llvm::APFloat(0.0));
             } else if (returnType->isIntegerTy()) {
                 zeroValue = llvm::ConstantInt::get(returnType, 0);
             } else {
-                // Fallback for other types
                 zeroValue = llvm::Constant::getNullValue(returnType);
             }
-            lastValue = Builder->CreateRet(zeroValue);
+            Builder->CreateRet(zeroValue);
         }
     }
     else{
         Builder->CreateRetVoid(); 
     }
-    return;
 }
 
 
@@ -278,20 +282,25 @@ void Codegen::visit(CallExpr& node){
 }
 
 void Codegen::visit(NumberLiteral& node) {
-if (node.resolvedType && *node.resolvedType == Type::NUMBER) {
+    if (node.resolvedType && *node.resolvedType == Type::FLOAT) {
         double val = std::stod(node.value);
         lastValue = llvm::ConstantFP::get(*TheContext, llvm::APFloat(val));
-    } else {
-    if (node.value.find('.') != std::string::npos) {
-        lastValue = llvm::ConstantFP::get(*TheContext, 
-            llvm::APFloat(llvm::APFloat::IEEEdouble(), llvm::StringRef(node.value))
-        );
-    } else {
+    } else if (node.resolvedType && *node.resolvedType == Type::INT) {
         lastValue = llvm::ConstantInt::get(*TheContext, 
-            llvm::APInt(64, std::stoll(node.value))
+            llvm::APInt(32, std::stoll(node.value))
         );
+    } else {
+        // Fallback or default behavior
+        if (node.value.find('.') != std::string::npos) {
+             lastValue = llvm::ConstantFP::get(*TheContext, 
+                llvm::APFloat(llvm::APFloat::IEEEdouble(), llvm::StringRef(node.value))
+            );
+        } else {
+             lastValue = llvm::ConstantInt::get(*TheContext, 
+                llvm::APInt(32, std::stoll(node.value))
+            );
+        }
     }
-}
 }
 
 
@@ -322,13 +331,15 @@ void Codegen::visit(BinaryExpr& node) {
         return;
     }
 
-    bool isDouble = left->getType()->isDoubleTy() || right->getType()->isDoubleTy();
+    bool leftIsDouble = left->getType()->isDoubleTy();
+    bool rightIsDouble = right->getType()->isDoubleTy();
+    bool isDouble = leftIsDouble || rightIsDouble;
 
     if (isDouble) {
-        if (!left->getType()->isDoubleTy())
-             left = Builder->CreateUIToFP(left, llvm::Type::getDoubleTy(*TheContext), "casttmp");
-        if (!right->getType()->isDoubleTy())
-             right = Builder->CreateUIToFP(right, llvm::Type::getDoubleTy(*TheContext), "casttmp");
+        if (!leftIsDouble)
+             left = Builder->CreateSIToFP(left, llvm::Type::getDoubleTy(*TheContext), "casttmp");
+        if (!rightIsDouble)
+             right = Builder->CreateSIToFP(right, llvm::Type::getDoubleTy(*TheContext), "casttmp");
     }
 
     switch (node.op) {
@@ -363,40 +374,60 @@ void Codegen::visit(BinaryExpr& node) {
                 lastValue = Builder->CreateSRem(left, right, "modtmp");
             break;
         case TokenKind::lessthan:
-            if (isDouble)
+            if (isDouble) {
                 lastValue = Builder->CreateFCmpOLT(left, right, "cmptmp");
-            else
+                lastValue = Builder->CreateUIToFP(lastValue, llvm::Type::getDoubleTy(*TheContext), "booltmp"); // Convert i1 to double if needed? No, keep as i1 for now, but wait, resolvedType says INT.
+                // Actually, comparisons return i1. We should probably zero-extend to i32 if we want to treat it as INT.
+                lastValue = Builder->CreateZExt(lastValue, llvm::Type::getInt32Ty(*TheContext), "booltmp");
+            } else {
                 lastValue = Builder->CreateICmpSLT(left, right, "cmptmp");
+                lastValue = Builder->CreateZExt(lastValue, llvm::Type::getInt32Ty(*TheContext), "booltmp");
+            }
             break;
         case TokenKind::greaterthan:
-            if (isDouble)
+            if (isDouble) {
                 lastValue = Builder->CreateFCmpOGT(left, right, "cmptmp");
-            else
+                lastValue = Builder->CreateZExt(lastValue, llvm::Type::getInt32Ty(*TheContext), "booltmp");
+            } else {
                 lastValue = Builder->CreateICmpSGT(left, right, "cmptmp");
+                lastValue = Builder->CreateZExt(lastValue, llvm::Type::getInt32Ty(*TheContext), "booltmp");
+            }
             break;
         case TokenKind::less_equal:
-            if (isDouble)
+            if (isDouble) {
                 lastValue = Builder->CreateFCmpOLE(left, right, "cmptmp");
-            else
+                lastValue = Builder->CreateZExt(lastValue, llvm::Type::getInt32Ty(*TheContext), "booltmp");
+            } else {
                 lastValue = Builder->CreateICmpSLE(left, right, "cmptmp");
+                lastValue = Builder->CreateZExt(lastValue, llvm::Type::getInt32Ty(*TheContext), "booltmp");
+            }
             break;
         case TokenKind::great_equal:
-            if (isDouble)
+            if (isDouble) {
                 lastValue = Builder->CreateFCmpOGE(left, right, "cmptmp");
-            else
+                lastValue = Builder->CreateZExt(lastValue, llvm::Type::getInt32Ty(*TheContext), "booltmp");
+            } else {
                 lastValue = Builder->CreateICmpSGE(left, right, "cmptmp");
+                lastValue = Builder->CreateZExt(lastValue, llvm::Type::getInt32Ty(*TheContext), "booltmp");
+            }
             break;
         case TokenKind::doublequal:
-            if (isDouble)
+            if (isDouble) {
                 lastValue = Builder->CreateFCmpOEQ(left, right, "cmptmp");
-            else
+                lastValue = Builder->CreateZExt(lastValue, llvm::Type::getInt32Ty(*TheContext), "booltmp");
+            } else {
                 lastValue = Builder->CreateICmpEQ(left, right, "cmptmp");
+                lastValue = Builder->CreateZExt(lastValue, llvm::Type::getInt32Ty(*TheContext), "booltmp");
+            }
             break;
         case TokenKind::not_equal:
-            if (isDouble)
+            if (isDouble) {
                 lastValue = Builder->CreateFCmpONE(left, right, "cmptmp");
-            else
+                lastValue = Builder->CreateZExt(lastValue, llvm::Type::getInt32Ty(*TheContext), "booltmp");
+            } else {
                 lastValue = Builder->CreateICmpNE(left, right, "cmptmp");
+                lastValue = Builder->CreateZExt(lastValue, llvm::Type::getInt32Ty(*TheContext), "booltmp");
+            }
             break;
         default:
             logerror("Unknown binary operator");
@@ -417,12 +448,8 @@ void Codegen::visit(VariableDecl& node) {
         if (lastValue) {
             llvm::Value* valueToStore = lastValue;
             if (lastValue->getType() != varType) {
-                if (varType->isIntegerTy() && lastValue->getType()->isDoubleTy()) {
-                    valueToStore = Builder->CreateFPToSI(lastValue, varType, "fptosi");
-                }
-                else if (varType->isDoubleTy() && lastValue->getType()->isIntegerTy()) {
-                    valueToStore = Builder->CreateSIToFP(lastValue, varType, "sitofp");
-                }
+                logerror("Variable declaration type mismatch");
+                return;
             }
             Builder->CreateStore(valueToStore, alloca);
         }
@@ -449,22 +476,16 @@ void Codegen::visit(AssignmentExpr& node) {
     
     // Cast the value to match the variable type if needed
     if (lastValue->getType() != varType) {
-        // Convert double to int64
-        if (varType->isIntegerTy() && lastValue->getType()->isDoubleTy()) {
-            valueToStore = Builder->CreateFPToSI(lastValue, varType, "fptosi");
-        }
-        // Convert int64 to double
-        else if (varType->isDoubleTy() && lastValue->getType()->isIntegerTy()) {
-            valueToStore = Builder->CreateSIToFP(lastValue, varType, "sitofp");
-        }
+        logerror("Assignment type mismatch");
+        return;
     }
     
     Builder->CreateStore(valueToStore, variable);
 }
 
 void Codegen::visit(BooleanLiteral& node) {
-    double value = node.value ? 1.0 : 0.0;
-    lastValue = llvm::ConstantFP::get(*TheContext, llvm::APFloat(value));
+    // Boolean is int (0 or 1)
+    lastValue = llvm::ConstantInt::get(*TheContext, llvm::APInt(32, node.value ? 1 : 0));
 }
 
 void Codegen::visit(IfStmt& node) {
