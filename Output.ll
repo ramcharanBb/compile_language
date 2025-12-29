@@ -5,8 +5,8 @@ source_filename = "ram-compiler"
 
 define i32 @test_vars() {
   %multmp = mul i32 10, 20
-  %addtmp = add i32 %multmp, 10
-  %subtmp = sub i32 %addtmp, 49
+  %addtmp4 = add i32 %multmp, 10
+  %subtmp = sub i32 %addtmp4, 49
   %printfCall = call i32 (ptr, ...) @printf(ptr @fmt, i32 %subtmp)
   ret i32 %subtmp
 }

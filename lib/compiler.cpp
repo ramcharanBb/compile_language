@@ -65,15 +65,26 @@ int main(int argc, const char **argv) {
     Codegen codegen; 
     codegen.generate(parsedprogram);
     std::cerr << "\n\n";
-    
-    // Generate object file
+
+    const std::string objFileName = "output.o";
+    const std::string execFileName = "a.out";
     std::cerr << "------------------Generating Object File------------------------\n";
-    if (codegen.GenerateObjectFile("output.o")) {
-        std::cerr << "Object file generated successfully: output.o\n";
+    if (codegen.GenerateObjectFile(objFileName)) {
+        std::cerr << "Object file generated successfully: " << objFileName << "\n";
+        std::cerr << "------------------Linking Executable------------------------\n";
+        if (codegen.runSystemLinker(objFileName, execFileName)) {
+            std::cerr << "Executable generated successfully: " << execFileName << "\n";
+            return 0;
+        } else {
+            std::cerr << "Linking failed!\n";
+            return 1; 
+        }
+
     } else {
         std::cerr << "Failed to generate object file\n";
-        return 1;
+        return 1; 
     }
+    
     
     return 0;
 }

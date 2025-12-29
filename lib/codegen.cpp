@@ -16,6 +16,7 @@
 #include "llvm/Target/TargetOptions.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include <optional>
+#include <cstdlib> 
 
 
 #include "codegen.h"
@@ -47,7 +48,7 @@ Codegen::Codegen(){
     // TheFPM->addPass(llvm::GVNPass());  
     TheFPM->addPass(MyPass()); 
     TheFPM->addPass(MyPassBBmerge());
-//     TheFPM->addPass(SEPass());
+    TheFPM->addPass(SEPass());
 
 }
 bool Codegen::GenerateObjectFile(std::string filename) {
@@ -75,7 +76,7 @@ llvm::Triple targetTriple(targetTripleStr);
   auto CPU = "generic";
   auto features = "";
   llvm::TargetOptions opt;
-  std::optional<llvm::Reloc::Model> RM;
+  std::optional<llvm::Reloc::Model> RM = llvm::Reloc::PIC_;
   auto targetMachine = target->createTargetMachine(targetTriple, CPU, features, opt, RM);
   if (!targetMachine) {
     llvm::errs() << "Failed to create target machine\n";
@@ -108,6 +109,25 @@ llvm::Triple targetTriple(targetTripleStr);
 
   return true;
 }
+
+
+bool Codegen::runSystemLinker(const std::string& objectFile, const std::string& outputFile) {
+    std::string command = "gcc " + objectFile + " -o " + outputFile;
+    std::cerr << "Executing linker command: " << command << "\n";
+    int result = std::system(command.c_str());
+    if (result == 0) {
+        std::string execommand = "./"+outputFile;
+        int result = std::system(execommand.c_str());
+        if (result == 0){
+            return true;
+        }
+        return true;
+    } else {
+        std::cerr << "Linker command failed with exit code: " << result << "\n";
+        return false;
+    }
+}
+
 
 void logerror(const char* str){
     std::cerr <<"Codegen error"<<str<<std::endl;
@@ -216,7 +236,6 @@ void Codegen::visit(ReturnStmt& node) {
         Builder->CreateRetVoid(); 
     }
 }
-
 
 void Codegen::visit(PrintExpr& node){
      std::vector<llvm::Value*> argsP;

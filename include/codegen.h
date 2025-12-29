@@ -52,6 +52,7 @@ class Codegen : public ASTVisitor{
     Codegen();
     void generate(std::vector<std::unique_ptr<FunctionDecl>> & program);
     bool GenerateObjectFile(std::string filename); 
+    bool runSystemLinker(const std::string& objectFile, const std::string& outputFile);
     llvm::Module* getModule() { return TheModule.get(); }
 
     void visit(NumberLiteral& node) override;
